@@ -6,12 +6,34 @@
 
 # define BUFFER_SIZE 4096
 
-class Request;
-class Response;
-
 typedef std::vector<std::pair<std::string, std::string> > t_vpair;
-typedef std::map<int, std::pair<Request, Response> *>::iterator rr_it;
-typedef	struct s_request t_request;
+
+typedef struct s_first_line {
+	std::string method;
+	std::string uri;
+	std::string version;
+}				t_first_line;
+
+typedef struct s_headers {
+	std::string host;
+	std::string connection;
+	std::string content_type;
+	size_t		content_length;
+	std::string transfer_encoding;
+	std::string date;
+	std::string accept;
+	std::string location;
+	std::string cookie;
+	std::string set_cookie;
+	std::string user_agent;
+}				t_headers;
+
+typedef struct s_post_body {
+	std::string		name;
+	std::string		filename;
+	std::string		content_type;
+	std::string		data;
+}					t_post_body;
 
 enum e_status {
 	STATUS_NONE = 0,						// place holder for empty input
@@ -42,39 +64,11 @@ enum e_parser_state {
 	ERROR,
 };
 
-typedef struct s_first_line {
-	std::string method;
-	std::string uri;
-	std::string version;
-}				t_first_line;
-
-typedef struct s_headers {
-	std::string host;
-	std::string connection;
-	std::string content_type;
-	size_t		content_length;
-	std::string transfer_encoding;
-	std::string date;
-	std::string accept;
-	std::string location;
-	std::string cookie;
-	std::string set_cookie;
-	std::string user_agent;
-}				t_headers;
-
-typedef struct s_post_body {
-	std::string		name;
-	std::string		filename;
-	std::string		content_type;
-	std::string		data;
-}					t_post_body;
-
 typedef struct s_request {
 	e_parser_state						state;
 	e_status							status;
 	std::string							error_message;
 	std::string							raw_first_line;
-	std::string							raw_query_string;
 	std::map<std::string, std::string>	raw_headers;
 	std::string							raw_body;
 	t_first_line						first_line;
@@ -82,23 +76,6 @@ typedef struct s_request {
 	std::string							body;
 	std::string							boundary;
 }										t_request;
-
-typedef struct s_cgi {
-	std::string		path;
-	std::string		ext;
-	pid_t			pid;
-	int				in;
-	int				out;
-	bool			forcked;
-	bool			queued;
-	t_request		request;
-	std::string		buffer;
-	std::string 	response;
-	e_status		status;
-	e_parser_state	state;
-	e_status		cgi_status;
-	e_parser_state	cgi_state;
-}				t_cgi;
 
 enum e_location_type {
 	LOC_NONE,

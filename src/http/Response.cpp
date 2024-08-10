@@ -21,24 +21,24 @@ size_t	Response::get_file_size() {
 static	std::string	http_code_msg(e_status code)
 {
 	switch (code) {
-		case OK:								return "OK";
-		case BAD_REQUEST:						return "Bad Request";
-		case NOT_FOUND:							return "Not Found";
-		case FORBIDDEN:							return "Forbidden";
-		case INTERNAL_SERVER_ERROR:				return "Internal Server Error";
-		case NOT_IMPLEMENTED:					return "Not Implemented";
-		case REDIRECT:							return "Redirect";
-		case NOT_MODIFIED:						return "Not Modified";
-		case TOO_MANY_REQUESTS:					return "Too Many Requests";
-		case REQUEST_ENTITY_TOO_LARGE:			return "Request Entity Too Large";
+		case OK:				return "OK";
+		case BAD_REQUEST:			return "Bad Request";
+		case NOT_FOUND:			return "Not Found";
+		case FORBIDDEN:			return "Forbidden";
+		case INTERNAL_SERVER_ERROR:		return "Internal Server Error";
+		case NOT_IMPLEMENTED:		return "Not Implemented";
+		case REDIRECT:			return "Redirect";
+		case NOT_MODIFIED:			return "Not Modified";
+		case TOO_MANY_REQUESTS:		return "Too Many Requests";
+		case REQUEST_ENTITY_TOO_LARGE:	return "Request Entity Too Large";
 		case REQUEST_HEADER_FIELDS_TOO_LARGE:	return "Request Header Fields Too Large";
-		case HTTP_VERSION_NOT_SUPPORTED:		return "Http Version NOT Supported";
-		case URI_TOO_LONG:						return "Url Too Long";
-		case LENGTH_REQUIRED:					return "Length Required";
-		case REQUEST_TIMEOUT:					return "Request Timeout";
-		case NOT_ACCEPTABLE:					return "Not Acceptable";
-		case METHOD_NOT_ALLOWED:				return "Method Not Allowed";
-		default:								return " ";
+		case HTTP_VERSION_NOT_SUPPORTED:	return "Http Version NOT Supported";
+		case URI_TOO_LONG:			return "Url Too Long";
+		case LENGTH_REQUIRED:		return "Length Required";
+		case REQUEST_TIMEOUT:		return "Request Timeout";
+		case NOT_ACCEPTABLE:		return "Not Acceptable";
+		case METHOD_NOT_ALLOWED:		return "Method Not Allowed";
+		default:				return " ";
 	}
 }
 
@@ -326,3 +326,4 @@ void	Response::sendResponse(int sock_fd, ServerConfig *server) {
 		}
 	}
 }
+

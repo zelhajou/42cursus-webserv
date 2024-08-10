@@ -9,22 +9,11 @@ Request::Request() : _fd(-1), _max_body_size(0), _state(FIRST_LINE), _status(OK)
 	this->_request.raw_body.clear();
 	this->_location_type = LOC_NONE;
 	this->_total_body_size = 0;
-	this->_cgi.in = -1;
-	this->_cgi.out = -1;
-	this->_cgi.queued = false;
-	this->_cgi.forcked = false;
 }
 
 Request::Request(const Request &R) { *this = R; }
 Request	&Request::operator = (const Request &R) { (void)R; return *this; }
 
-Request::~Request() {
-	std::vector<LocationNode*>::iterator it;
-	for (it = this->_location_tree.begin(); it != this->_location_tree.end(); it++) {
-		std::cout << "deleted Location ptr: " << (void *)*it << std::endl;
-		delete *it;
-	}
-}
 Request::~Request() {
 	std::vector<LocationNode*>::iterator it;
 	for (it = this->_location_tree.begin(); it != this->_location_tree.end(); it++) {
@@ -35,7 +24,6 @@ Request::~Request() {
 void Request::setLocation() {
 	ServerConfig*	server = this->_servers[0];
 	std::vector<ServerConfig*>::iterator it = this->_servers.begin();
-
 	for (; it != this->_servers.end(); it++) {
 		if ((*it)->server_name == this->_request.headers.host) {
 			server = *it;
@@ -43,11 +31,10 @@ void Request::setLocation() {
 		}
 	}
 	this->_max_body_size = std::strtoll(server->client_max_body_size.c_str(), NULL, 10);
-	this->_c_server = server;
+
 	std::map<std::string, LocationConfig>::iterator itm;
 	for (itm = server->locations.begin(); itm != server->locations.end(); itm++) {
 		LocationNode*	node = new LocationNode;
-		std::cout << "Location ptr: " << (void *)node << std::endl;
 		node->name = itm->first;
 		node->location = &itm->second;
 		::insert(this->_location_tree, node, ::cmp);
@@ -76,171 +63,6 @@ static bool match_extension(std::string uri, std::string ext, size_t& pos) {
 	if ((pos = uri.find_last_of(".")) == std::string::npos)
 		return false;
 	return uri.substr(pos) == ext;
-}
-
-static std::string to_str(ssize_t n) {
-	std::stringstream ss;
-	ss << n;
-	return ss.str();
-}
-
-void	Request::set_cgi_headers() {
-	setenv("REQUEST_METHOD", this->_request.first_line.method.c_str(), 1);
-	setenv("SERVER_PROTOCOL", this->_request.first_line.version.c_str(), 1);
-	setenv("SERVER_SOFTWARE", "webserv", 1);
-	setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
-	setenv("SERVER_NAME", this->_request.headers.host.c_str(), 1);
-	setenv("SERVER_PORT", this->_c_server->listen_port.c_str(), 1);
-	setenv("HTTP_COOKIE", this->_request.headers.cookie.c_str(), 1);
-	setenv("CONTENT_TYPE", this->_request.headers.content_type.c_str(), 1);
-	setenv("PATH_INFO", this->_cgi_info.second.c_str(), 1);
-	setenv("CENTENT_LENGTH", to_str(this->_request.headers.content_length).c_str(), 1);
-	setenv("QUERY_STRING", this->_request.raw_query_string.c_str(), 1);
-	setenv("REQUEST_URI", this->_request.first_line.uri.c_str(), 1);
-	setenv("SCRIPT_NAME", this->_cgi_info.first.c_str(), 1);
-}
-
-void	Request::handle_cgi() {
-	set_cgi_headers();
-
-	pid_t			pid;
-	int				fd[2];
-
-	std::cout << "handle_cgi" << std::endl;
-	this->_cgi.path = this->_c_location->root + "/" + this->_c_location->cgi_path;
-	this->_cgi.path += this->_request.first_line.uri;
-	this->_cgi.ext = this->_cgi_info.first;
-
-	if (pipe(fd) == -1) {
-		setRequestState("cgi pipe failed!", INTERNAL_SERVER_ERROR, ERROR);
-		return ;
-	}
-	if ((pid = fork()) == -1) {
-		(close(fd[0]), close(fd[1]));
-		setRequestState("cgi fork failed!", INTERNAL_SERVER_ERROR, ERROR);
-		return ;
-	}
-	if (pid == 0) {
-		(close(fd[0]), dup2(fd[1], 1), close(fd[1]));
-		extern char **environ;
-		execve(this->_cgi.path.c_str(), NULL, environ);
-		setRequestState("cgi execve failed!", INTERNAL_SERVER_ERROR, ERROR);
-		exit(127);
-	}
-	this->_cgi.pid = pid;
-	this->_cgi.in = fd[1];
-	this->_cgi.out = fd[0];
-	std::cout << "Pipe[0]: " << this->_cgi.in << " Pipe[1]: " << this->_cgi.out << std::endl;
-	this->_cgi.forcked = true;
-}
-
-void	Request::clear_cgi() {
-	close(this->_cgi.in);
-	close(this->_cgi.out);
-	this->_cgi.forcked = false;
-	this->_cgi.queued = false;
-	this->_cgi.buffer.clear();
-	if (kill(this->_cgi.pid, 0) == 0)
-		kill(this->_cgi.pid, SIGKILL);
-	this->_cgi.in = -1;
-	this->_cgi.out = -1;
-}
-
-void	Request::parse_cgi_headers() {
-	this->_cgi.request.headers.host = this->_cgi.request.raw_headers["Host"];
-	this->_cgi.request.headers.connection = this->_cgi.request.raw_headers["Connection"];
-	this->_cgi.request.headers.content_type = this->_cgi.request.raw_headers["Content-Type"];
-	this->_cgi.request.headers.content_length = std::strtoll(this->_cgi.request.raw_headers["Content-Length"].c_str(), NULL, 10);
-	this->_cgi.request.headers.transfer_encoding = this->_cgi.request.raw_headers["Transfer-Encoding"];
-	this->_cgi.request.headers.date = this->_cgi.request.raw_headers["Date"];
-	this->_cgi.request.headers.accept = this->_cgi.request.raw_headers["Accept"];
-	this->_cgi.request.headers.location = this->_cgi.request.raw_headers["Location"];
-	this->_cgi.request.headers.cookie = this->_cgi.request.raw_headers["Cookie"];
-	this->_cgi.request.headers.set_cookie = this->_cgi.request.raw_headers["Set-Cookie"];
-	this->_cgi.request.headers.user_agent = this->_cgi.request.raw_headers["User-Agent"];
-	std::string status = this->_cgi.request.raw_headers["Status"];
-	if (status.size() == 0)
-		this->_cgi.response = "HTTP/1.1 200 OK\r\n";
-	else
-		this->_cgi.response = "HTTP/1.1 " + status + "\r\n";
-	this->_cgi.response += "Server: webserv\r\n";
-	this->_cgi.response += "Connection: " + this->_cgi.request.headers.connection + "\r\n";
-	this->_cgi.response += "Date: " + this->_cgi.request.headers.date + "\r\n";
-	this->_cgi.response += "Content-Type: " + this->_cgi.request.headers.content_type + "\r\n";
-	this->_cgi.response += "Content-Length: " + to_str(this->_cgi.request.headers.content_length) + "\r\n";
-	this->_cgi.response += "Transfer-Encoding: " + this->_cgi.request.headers.transfer_encoding + "\r\n";
-	this->_cgi.response += "Location: " + this->_cgi.request.headers.location + "\r\n";
-	this->_cgi.response += "Accept: " + this->_cgi.request.headers.accept + "\r\n";
-	this->_cgi.response += "Cookie: " + this->_cgi.request.headers.cookie + "\r\n";
-	this->_cgi.response += "Set-Cookie: " + this->_cgi.request.headers.set_cookie + "\r\n";
-	this->_cgi.response += "User-Agent: " + this->_cgi.request.headers.user_agent + "\r\n";
-	this->_cgi.response += "\r\n";
-}
-
-void	Request::get_cgi_headers() {
-	if (this->_cgi.request.state != HEADERS || this->_cgi.request.state == ERROR || this->_cgi.request.status != STATUS_NONE)
-		return ;
-	size_t	pos;
-
-	if ((pos = this->_cgi.buffer.find("\r\n\r\n")) == std::string::npos)
-		return ;
-	std::string headers = this->_cgi.buffer.substr(0, pos);
-	this->_cgi.buffer = this->_cgi.buffer.substr(pos + 4);
-	while ((pos = headers.find("\r\n")) != std::string::npos) {
-		std::string line = headers.substr(0, pos);
-		headers = headers.substr(pos + 2);
-		if ((pos = line.find(":")) == std::string::npos)
-			{this->_cgi.request.status = INTERNAL_SERVER_ERROR; this->_cgi.request.state = ERROR; return ;}
-		std::string key = line.substr(0, pos);
-		std::string value = line.substr(pos + 2);
-		this->_cgi.request.raw_headers[key] = value;
-	}
-	this->_cgi.request.state = BODY;
-	parse_cgi_headers();
-}
-
-void	Request::get_cgi_body() {
-	char	buffer[BUFFER_SIZE];
-	int		ret;
-
-	if (this->_cgi.request.state != BODY || this->_cgi.request.state == ERROR || this->_cgi.request.status != STATUS_NONE) {
-		while ((ret = recv(this->_cgi.out, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
-			;
-		this->_cgi.status = this->_cgi.request.status;
-		this->_cgi.state = this->_cgi.request.state;
-		return ;
-	}
-
-	this->_cgi.response.append(this->_cgi.buffer);
-}
-
-void	Request::recvCGIRequest() {
-	char	buffer[BUFFER_SIZE];
-	int		ret;
-
-	std::cout << "recvCGIRequest" << std::endl;
-	ret = recv(this->_cgi.out, buffer, BUFFER_SIZE, 0);
-	if (ret == -1 || ret == 0) {
-		this->_cgi.status = INTERNAL_SERVER_ERROR;
-		this->_cgi.state = ERROR;
-		return ;
-	}
-	this->_cgi.buffer.append(buffer, ret);
-	get_cgi_headers();
-	get_cgi_body();
-}	
-
-void	Request::sendCGIRequest() {
-	int		ret;
-
-	std::cout << "sendCGIRequest" << std::endl;
-	ret = send(this->_cgi.in, this->_request.body.c_str(), this->_request.body.size(), 0);
-	if (ret == -1) {
-		this->_cgi.cgi_status = INTERNAL_SERVER_ERROR;
-		this->_cgi.cgi_state = ERROR;
-		return ;
-	}
-	this->_request.body = this->_request.body.substr(ret);
 }
 
 bool	Request::is_cgi(LocationConfig *loc) {
@@ -348,7 +170,7 @@ void	Request::handle_directory(LocationConfig* loc) {
 void Request::handle_uri() {
 
 	LocationConfig*	loc = this->_c_location;
-	std::string 	r = loc->root + "/" + ((this->_location_type == CGI) ? (loc->cgi_path + "/") : "");
+	std::string r = loc->root + "/" + ((this->_location_type == CGI) ? (loc->cgi_path+"/") : "");
 
 	this->_request.first_line.uri.replace(0, loc->path.size(), r);
 
@@ -475,13 +297,8 @@ void	Request::set_body() {
 		this->_state = this->_request.state;
 		return ;
 	}
-	if (this->_method == GET || this->_method == DELETE) {
-		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
-			;
-		this->_request.state = DONE;
-		this->_state = DONE;
-		return ;
-	}
+	if (this->_method == GET || this->_method == DELETE)
+		{this->_state = DONE; return ;}
 	if (this->_request.headers.transfer_encoding == "chunked")
 		handle_chunked();
 	else if (this->_request.headers.content_length > this->_max_body_size) {
@@ -633,6 +450,7 @@ void	Request::recvRequest() {
 	char		buffer[BUFFER_SIZE];
 	int			ret;
 
+	if (this->_state == DONE || this->_state == ERROR) return ;
 	ret = recv(this->_fd, buffer, BUFFER_SIZE, 0);
 	this->_recv_bytes = ret;
 	if (ret == -1 || ret == 0) {
@@ -644,10 +462,6 @@ void	Request::recvRequest() {
 	set_first_line();
 	set_headers();
 	set_body();
-	if (this->_location_type == CGI
-		&& this->_request.state == DONE
-		&& !this->_cgi.forcked)
-		handle_cgi();
 }
 
 std::string	urldecode(std::string str) {

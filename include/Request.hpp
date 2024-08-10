@@ -82,14 +82,7 @@ public:
 	void						setLocation();
 	void						setRequestState(std::string msg, e_status status, e_parser_state state);
 	void						set_servers(std::vector<ServerConfig*>& servers);
-	void						handle_cgi();
-	void						set_cgi_headers();
-	void						recvCGIRequest();
-	void						sendCGIRequest();
-	void						get_cgi_headers();
-	void						get_cgi_body();
-	void						clear_cgi();
-	void						parse_cgi_headers();
+
 
 public:
 	int										_fd;
@@ -112,8 +105,6 @@ public:
 	bool									_is_return;
 	size_t									_recv_bytes;
 	std::vector<ServerConfig*>				_servers;
-	ServerConfig							*_c_server;
-	t_cgi									_cgi;
 };
 
 #endif

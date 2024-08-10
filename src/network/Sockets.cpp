@@ -392,14 +392,9 @@ void	Sockets::accept(int sock_fd) {
 	////
 }
 
-
 void	Sockets::recvFrom(int sock_fd) {
-	ServerConfig	*serv = this->_fd_to_server.find(sock_fd)->second;
-	bool			is_cgi;
-	rr_it			pai;
-	
-	serv->get_fd_iter(sock_fd, is_cgi, pai);
-
+	ServerConfig *serv = this->_fd_to_server.find(sock_fd)->second;
+	std::map<int, std::pair<Request, Response> *>::iterator	pai = serv->_requests.find(sock_fd);
 	if (pai == serv->_requests.end()) {
 		std::vector<ServerConfig*>	servs;
 		servs.push_back(serv);
@@ -407,7 +402,6 @@ void	Sockets::recvFrom(int sock_fd) {
 			for (std::map<std::string, ServerConfig*>::iterator it = this->_dup_servers.begin(); it != this->_dup_servers.end(); ++it) 
 				if (it->first == serv->host+":"+serv->listen_port)	servs.push_back(it->second);
 		std::pair<Request, Response>	*new_pair = new std::pair<Request, Response>;
-		std::cout << "PAIR ptr: " << (void *)new_pair << std::endl;
 		serv->_requests[ sock_fd ] = new_pair;
 		serv->_requests[ sock_fd ]->first.set_servers( servs );
 		serv->_requests[ sock_fd ]->first.set_fd( sock_fd );
@@ -431,33 +425,13 @@ void	Sockets::recvFrom(int sock_fd) {
 		//
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);	
 	}
-	else if (is_cgi) {
-		if (pai->second->first._location_type == CGI
-			&& pai->second->first.getState() == DONE
-			&& !pai->second->first._cgi.queued) {
-			if (pai->second->first._cgi.in > 0 && pai->second->first._cgi.out > 0) {
-				std::cout << "cgi fds: " << pai->second->first._cgi.in << " " << pai->second->first._cgi.out << std::endl;
-				this->_fd_to_server[ pai->second->first._cgi.in ] = serv;
-				this->_fd_to_server[ pai->second->first._cgi.out ] = serv;
-				this->_kqueue.SET_QUEUE(pai->second->first._cgi.in, EVFILT_READ, 1);
-				this->_kqueue.SET_QUEUE(pai->second->first._cgi.out, EVFILT_WRITE, 1);
-				pai->second->first._cgi.queued = true;
-			}
-		}
-	}
 }
 
 void	Sockets::sendTo(int sock_fd) {
-	ServerConfig	*serv = this->_fd_to_server.find(sock_fd)->second;
-	bool			is_cgi;
-	rr_it			pai;
-	
-	serv->get_fd_iter(sock_fd, is_cgi, pai);
-
-	if (!is_cgi)	pai->second->second.sendResponse(sock_fd, serv);
-	else		pai->second->first.sendCGIRequest();
-	// pai->second->second.sendResponse(sock_fd, serv);
-	if (!is_cgi && pai->second->second.get_status() == DONE) {
+	ServerConfig *serv = this->_fd_to_server.find(sock_fd)->second;
+	std::map<int, std::pair<Request, Response>* >::iterator pai = serv->_requests.find(sock_fd);
+	pai->second->second.sendResponse(sock_fd, serv);
+	if (pai->second->second.get_status() == DONE) {
 		if (pai->second->second._connection_type == "keep-alive" && pai->second->second._has_body) {
 			this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 0);
 			this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 1);

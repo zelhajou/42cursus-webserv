@@ -66,7 +66,6 @@ struct	MainConfig;
 struct	LocationConfig;
 
 typedef std::vector<ServerConfig *>::iterator mit;
-typedef std::map<int, std::pair<Request, Response> *>::iterator rr_it;
 
 class Sockets {
 public:
@@ -98,7 +97,6 @@ public:
 	bool							cgi_in(int, std::pair<Request, Response>*, ServerConfig*);
 	void							cgi_out(int);
 	std::map<std::string, std::string>				env_variables;
-
 private:
 	MIME						_mime;
 	MainConfig					_main_config;

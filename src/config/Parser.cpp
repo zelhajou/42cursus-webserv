@@ -24,7 +24,6 @@ void Parser::parseServerBlock(MainConfig& config)
     expect(TOKEN_OPEN_BRACE);
 
     ServerConfig* server = new ServerConfig;
-	std::cout << "server ptr: " << server << std::endl;
     while (pos < tokens.size())
     {
         if (tokens[pos].getType() == TOKEN_CLOSE_BRACE)
@@ -37,7 +36,6 @@ void Parser::parseServerBlock(MainConfig& config)
 
     if (pos >= tokens.size() || tokens[pos].getType() != TOKEN_CLOSE_BRACE)
     {
-		std::cout << "delete server ptr: " << server << std::endl;
         delete server;
         reportError("Missing closing brace for server block");
     }
@@ -379,10 +377,10 @@ std::string Parser::tokenTypeToString(TokenType type) const
 
 void ServerConfig::closeConn(int s)
 {
-	rr_it it = this->_requests.find(s);
-	if (it != this->_requests.end()) {
-		delete it->second;
-	 	this->_requests.erase(it);
+	std::map<int, std::pair<Request, Response> *>::iterator i = this->_requests.find(s);
+	if (i != this->_requests.end()) {
+		delete i->second;
+	 	this->_requests.erase(i);
 	}
 }
 
@@ -394,28 +392,12 @@ ServerConfig::~ServerConfig() {
 		std::cout << KRED << "cleaning " << KNRM << this->server_name << " configs\n";
 }
 
-void ServerConfig::get_fd_iter(int s, bool& is_cgi, rr_it& it)
-{
-	it = this->_requests.begin();
-	for (; it != this->_requests.end(); ++it)
-	{
-		if (it->first == s)
-			{std::cout << "Found Not CGI\n"; is_cgi = false; break ;}
-		if (it->second->first._cgi.in == s && it->second->first._cgi.queued)
-			{std::cout << "Found CGI IN\n"; is_cgi = true; break ;}
-		if (it->second->first._cgi.out == s && it->second->first._cgi.queued)
-			{std::cout << "Found CGI OUY\n"; is_cgi = true; break ;}
-	}
-	{std::cout << "Not Found\n"; is_cgi = false;}
-}
-
 MainConfig::~MainConfig()
 {
 	if (DEBUG)
 		std::cout << KRED << "cleaning " << KNRM << "configuration structure..\n";
 	for (std::vector<ServerConfig *>::iterator i = this->servers.begin(); i != this->servers.end(); ++i) {
 	 	delete *i;
-	}
 	}
 }
 void Parser::displayMainConfig(const MainConfig& main_config)
