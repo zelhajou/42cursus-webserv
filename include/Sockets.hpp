@@ -26,10 +26,10 @@
 # define CRLF			"\r\n"
 # define CLR_TERM			"\e[1;1H\e[2J"
 # ifndef PROJECT_PATH
-	# define PROJECT_PATH "/Users/hsobane/projects/teamWeb/"
+#  define PROJECT_PATH "/Users/hsobane/projects/teamWeb/"
 # endif
 # ifndef DEBUG
-	# define DEBUG 1
+#  define DEBUG 0
 # endif
 # define CONFIG_PATH PROJECT_PATH"config"
 # define CGI_COMM CONFIG_PATH"/cgi_comm"
@@ -38,7 +38,7 @@
 # define DEFAULT_CONFIG CONFIG_PATH"/config_files/default.conf"
 # define _S_DEL "__S_"CRLF"_DEL__"
 # define _M_DEL "__M_"CRLF"_DEL__"
-# define CGI_TIME_LIMIT	10	// s
+# define CGI_TIME_LIMIT	300	// s
 # define CGI_PIPE_MAX_SIZE	1000
 # define UNIX_SOCK_BUFFER	8000
 # define PYTHON_PATH	"/usr/local/bin/python3"
@@ -53,7 +53,7 @@
 # define KGRN  "\x1B[32m"
 # define KYEL  "\x1B[33m"
 # define KBLU  "\x1B[34m"
-# define KMAG  "\x1B[35m"
+# define KAG  "\x1B[35m"
 # define KCYN  "\x1B[36m"
 # define KWHT  "\x1B[37m"
 # define KUND  "\033[4m"
@@ -85,41 +85,34 @@ public:
 	void						cleanUp();
 	void						kqueueLoop();
 	std::string					get_mime_type(std::string);
-	size_t						get_sess_id();
-	void						incr_sess_id();
 	//
-	void						initiate_servers(MainConfig&, char **);
-	//
-	void							set_Cookies(std::string, std::string);
-	std::map<std::string, std::map<std::string, std::string> >::iterator	get_Cookies(std::string);
-	std::string						get_cookie(std::string, std::string);
-	std::string						get_client(std::string, std::string);
-	std::string						form_user_name(Request &);
-	void							check_session(Response &);
-	//
-	bool							initiate_master_process();
+	void							initiate_servers(MainConfig&, char **);
+	int							initiate_master_process(std::pair<int, int>*, std::string, std::string, std::string, std::string);
 	bool							update_master_state();
-	std::string						execute_script(std::string);
+	std::string						execute_script(std::string, std::string);
 	void							check_and_remove(std::string);
 	void							_enrg_env_var(std::string, std::string);
 	void							_initiate_env_variables(char**);
 	std::string						format_env();
 	bool							is_valid_mime(std::string);
+	bool							cgi_in(int, std::pair<Request, Response>*, ServerConfig*);
+	void							cgi_out(int);
 	std::map<std::string, std::string>				env_variables;
 
 private:
-	MIME														_mime;
-	MainConfig													_main_config;
-	KQueue														_kqueue;
-	std::map<int, ServerConfig *>								_fd_to_server;
-	std::map<std::string, ServerConfig *>						_dup_servers;
-	std::map<std::string, std::map<std::string, std::string> >	_Cookies;
-	size_t							_sess_id;
-	pid_t							master_PID;
-	int								master_process;
-	int								cgi_controller;
-	std::string						socket_path;
-	bool							active_master;
+	MIME						_mime;
+	MainConfig					_main_config;
+	KQueue						_kqueue;
+	std::map<int, ServerConfig *>				_fd_to_server;
+	std::map<std::string, ServerConfig *>			_dup_servers;
+	////////////	< unix_process, < worker_pid, client > >
+	std::map<int, std::pair<int, int>*>			_cgi_clients;
+	//////////
+	pid_t						master_PID;
+	int						master_process;
+	int						cgi_controller;
+	std::string					socket_path;
+	bool						active_master;
 };
 
 void		fix_up_signals(void (*)(int));

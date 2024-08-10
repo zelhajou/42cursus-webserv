@@ -94,6 +94,7 @@ std::string	generate_home_html(const char *uri, std::string user_name) {
 			html.append("<a href=\""WWW_UPLOAD_PATH"/" + std::string(direct->d_name) + "\" >" + file_name + "</a>");
 		}
 	}
+	closedir(dir);
 	//////////////////
 	html.append("</div></div></body></html>");
 	return	html;
@@ -137,8 +138,10 @@ std::string	get_user_name() {
 	session_id = session_id.substr(0, SESSION_ID_LENGTH);
 	//
 	std::fstream	_file(DATA_FILE, std::ios::in);
+	std::cout << "FILE_is_NOT_OPEN" << std::endl;
 	if (!_file.is_open())	return	"";
 	for (;std::getline(_file, buffer);) {
+		std::cout << "FILE_iS_oPEN" << std::endl;
 		if (_found) {
 			_file.close();
 			return	buffer.substr(11, buffer.find("\n"));
@@ -214,7 +217,6 @@ std::string	handle_signup(const char *uri, std::string query_string) {
 }
 
 int	main() {
-	std::cout << "REACHED thit\n";
 	const	char*	R = std::getenv("REQUEST_METHOD");
 	const	char*	URI = std::getenv("REQUEST_URI");
 	if ( !R || !URI ) {
@@ -243,12 +245,12 @@ int	main() {
 			input.append(buffer, r);
 		}
 		std::string	CONTENT_TYPE(const_cast<char*>(C_T));
-		if (CONTENT_TYPE.find("multipart/form-data") == 0
+		if (CONTENT_TYPE.find("multipart/form-data") != std::string::npos
 			&& is_registered_user)
 			std::cout << handle_file_submission(URI, user_name, input);
-		else if (CONTENT_TYPE.find("application/x-www-form-urlencoded") == 0) {
+		else if (CONTENT_TYPE.find("application/x-www-form-urlencoded") != std::string::npos) {
 			if (is_registered_user)
-				std::cout << '\n' << generate_home_html(URI, user_name) << '\n';
+				std::cout << '\n' << generate_home_html(URI, user_name);
 			else	std::cout << handle_signup(URI, input);
 		}
 		else	std::cout << "\n<html><head>"COMMON_CSS"</head>"INVALID_MTH"</html>\n";

@@ -387,7 +387,7 @@ void ServerConfig::closeConn(int s)
 }
 
 ServerConfig::ServerConfig()
-	: default_session_managment(false), is_duplicated(false) {}
+	: is_duplicated(false) {}
 
 ServerConfig::~ServerConfig() {
 	if (DEBUG)

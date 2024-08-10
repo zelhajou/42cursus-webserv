@@ -1,12 +1,13 @@
 CURRENT_DIR := $(shell pwd)/
 CXX = c++ #-g -fsanitize=address 
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude -D PROJECT_PATH=\"$(CURRENT_DIR)\"
+#CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude -D PROJECT_PATH=\"$(CURRENT_DIR)\"
+CXXFLAGS = -std=c++98 -Iinclude -D PROJECT_PATH=\"$(CURRENT_DIR)\"
 SRC_DIR = src
 BUILD_DIR = build
 TARGET = webserv
 CONDIRS = config/cgi_comm config/sockets config/html_default_error_files config/html_generated_files
 APP = www/cgi_scripts/py_login_app/database www/cgi_scripts/py_login_app/sessions www/cgi_scripts/py_login_app/uploads
-DEBUG ?= 1
+DEBUG ?= 0
 
 ifeq ($(DEBUG), 1)
 	CXXFLAGS += -D DEBUG=1

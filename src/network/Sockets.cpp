@@ -1,6 +1,5 @@
 #include "Sockets.hpp"
 
-
 Sockets::Sockets(const Sockets &S) {*this = S;}
 Sockets	&Sockets::operator = (const Sockets &S) { (void)S; return *this;}
 
@@ -17,6 +16,34 @@ static	void	child_ex(int sig_num) {
 	exit(sig_num);
 }
 
+Sockets::Sockets( void ) : active_master(0) {
+	std::srand(std::time(NULL));
+	std::cout << CLR_TERM;
+}
+
+Sockets::~Sockets() {
+	std::cout << KGRN"PID:" << std::to_string(getpid()) << std::endl;
+	if (DEBUG) {
+		std::cout << KRED"cleaning...\n";
+		std::cout << "deleting unix socket: " << KNRM
+			<< this->socket_path << std::endl;
+	}
+	this->check_and_remove(this->socket_path);
+	if (this->active_master) {
+		if (DEBUG)
+			std::cout << KRED"killing master process\n" << KNRM;
+		close(this->master_process);
+		kill(this->master_PID, SIGKILL);
+	}
+	if (DEBUG)
+		std::cout << KRED"closing active connections..\n" << KNRM;
+	for (std::map<int, ServerConfig*>::iterator i=this->_fd_to_server.begin(); i!=this->_fd_to_server.end();++i)
+		if (i->second && i->second->_socket == i->first)	close(i->first);
+}
+
+///////////////////////////	CGI
+/////	map < unix_process, pair < worker_pid, client > >
+
 static	std::string	exec_job(char *executer, char *script, char **env, std::string file_name) {
 	std::string	output;
 	char		buffer[CGI_PIPE_MAX_SIZE];
@@ -26,6 +53,7 @@ static	std::string	exec_job(char *executer, char *script, char **env, std::strin
 	if ((grandchild = fork()) < 0)
 		return "webserv_cgi_status=500; CGI fork() failure";
 	else if (!grandchild) {
+		std::cout << "grandchild:env:" << env << std::endl;
 		char	*argv[] = {executer, script, 0};
 		if (file_name.size()) {
 			int fd = open(file_name.c_str(), R_OK);
@@ -39,6 +67,13 @@ static	std::string	exec_job(char *executer, char *script, char **env, std::strin
 		exit(EXIT_FAILURE);
 	}
 	close(pi[1]);
+	fd_set	r_set; FD_ZERO(&r_set); FD_SET(pi[0], &r_set);
+	struct	timeval	tv;
+	std::memset(&tv, 0, sizeof(tv));
+	tv.tv_sec = CGI_TIME_LIMIT;
+	s = select(pi[0] + 1, &r_set, NULL, NULL, &tv);
+	if (s < 0)	return "webserv_cgi_status=500; cgi ERROR";
+	else if (s == 0)	return "webserv_cgi_status=504; cgi TIMEOUT";
 	output.append("webserv_cgi_status=200;");
 	while (true) {
 		std::memset(buffer, 0, sizeof(buffer));
@@ -60,79 +95,53 @@ static	int	geta_unix_socket(struct sockaddr_un &address, std::string socket_path
 	return		sock;
 }
 
-static	std::string	prepare_launch_and_receive(std::string input, std::string del, std::string semi_del) {
-	size_t		pos = input.find(del);
-	std::string	s_env = input.substr(0, pos);
-	input = input.substr(pos + del.size());
+static	char **prepare_env(std::string s_env, std::string semi_del) {
 	std::vector<std::string>	v_env;
+	size_t			pos;
+	char			**env;
+	
 	for (;(pos = s_env.find(semi_del)) != std::string::npos;) {
 		v_env.push_back(s_env.substr(0, pos));
 		s_env = s_env.substr(pos + semi_del.size()); }
 	pos = 0;
-	char	**env = new char*[ v_env.size() + 1 ];
-	std::cout << "env ptr: " << (void *)env << std::endl;
+	env = new char*[ v_env.size() + 1 ];
 	std::vector<std::string>::iterator	it = v_env.begin();
 	for (; it!=v_env.end();++it, pos++) {
 		env[pos] = new char[ it->size() +1 ];
-		std::cout << "env[" << pos << "] ptr: " << (void *)env[pos] << std::endl;
-		std::strcpy(env[pos], it->c_str()); }
+		std::strcpy(env[pos], it->c_str());}
 	env[pos] = 0;
-	pos = input.find(del);
-	std::string	executer = input.substr(0, pos);
-	input = input.substr(pos + del.size());
-	pos = input.find(del);
-	//////////////////////
-	std::string output = exec_job(const_cast<char*>(executer.c_str()),
-			const_cast<char*>(input.substr(0, pos).c_str()),
-			env,
-			input.substr(pos + del.size()));
-	//////////////////////
-	for (int i=0; env[i]; i++)	{delete	env[i]; std::cout << "deleting env[" << i << "]\n";}
-	delete	[] env;
-	return	output;
+	return	env;
 }
 
-static	void	master_routine(std::string socket_path) {
+static	void	master_routine(std::string socket_path, std::string executer, std::string script, std::string file_name, std::string s_env) {
 	fix_up_signals(child_ex);
-	std::string	input, output;
-	std::string	executer, script;
-	struct	sockaddr_un	address;
-	int	sock, n, temp_n;
-	fd_set	r_set, w_set, r_copy, w_copy;
-	FD_ZERO(&r_set); FD_ZERO(&w_set);
-	FD_ZERO(&r_copy); FD_ZERO(&w_copy);
+	std::string	output;
+	struct	sockaddr_un address;
+	int	sock, n;
+	fd_set	w_set;	FD_ZERO(&w_set);
 	if ((sock = geta_unix_socket(address, socket_path)) < 0)	exit(1);
-	FD_SET(sock, &r_set);
-	for (int i = 15 ; i ; i--) {
+	for (int i=15; i; i--) {
 		if (connect(sock, (struct sockaddr*)&address, sizeof(address)) == 0)	break;
-		else if (i == 1) { exit(1); } }
-	for (;;) {
-		r_copy = r_set; w_copy = w_set;
-		n = select(sock + 1, &r_copy, &w_copy, NULL, NULL);
-		if (!n) continue; else if (n < 0) break;
-		if (FD_ISSET(sock, &r_copy)) {
-			char	buffer[UNIX_SOCK_BUFFER];
-			{	//	<--
-				std::memset(buffer, 0, sizeof(buffer));
-				temp_n = recv(sock, buffer, UNIX_SOCK_BUFFER - 1, 0/*MSG_DONTWAIT*/);
-				if (temp_n <= 0)	break;
-				input.append(buffer, temp_n);
-			}
-			output = prepare_launch_and_receive(input, _M_DEL, _S_DEL);
-			FD_CLR(sock, &r_set); FD_SET(sock, &w_set);
-			input.clear();
+		else if (i == 1) exit(1); }
+	char	**env = prepare_env(s_env, _S_DEL);
+	output = exec_job(const_cast<char*>(executer.c_str()),
+		const_cast<char*>(script.c_str()),
+		env,
+		file_name);
+	for (int i=0; env[i]; i++)
+	{ delete env[i]; }
+	delete	[] env;
+	FD_SET(sock, &w_set);
+	n = select(sock + 1, NULL, &w_set, NULL, NULL);
+	if (n > 0 && FD_ISSET(sock, &w_set)) {
+		while (true) {	//	-->
+			n = send(sock, output.c_str(), output.size(), 0 /*MSG_DONTWAIT*/);
+			if (n <= 0)	break;
+			output = output.substr( n );
 		}
-		else if (FD_ISSET(sock, &w_copy)) {
-			while (true) {	//	-->
-				temp_n = send(sock, output.c_str(), output.size(),0 /*MSG_DONTWAIT*/);
-				if (temp_n <= 0)	break;
-				output = output.substr(temp_n);
-			}
-			output.clear();
-			FD_CLR(sock, &w_set); FD_SET(sock, &r_set);
-		}
+		exit(0);
 	}
-	exit(0);
+	exit(1);
 }
 
 void	Sockets::_enrg_env_var(std::string name, std::string value) {
@@ -171,89 +180,204 @@ void	Sockets::initiate_servers(MainConfig &main_config, char **env) {
 	this->_initiate_env_variables(env);
 }
 
-bool	Sockets::initiate_master_process() {
-	struct	sockaddr_un	address;
-	this->socket_path = SOCKETS_PATH"/unix_quick_private_socket";
-	this->check_and_remove(this->socket_path);
-	// std::cout << "creating cgi master process.." << std::endl;
-	if ((this->cgi_controller = geta_unix_socket(address, this->socket_path)) < 0) return	false;
-	if (bind(this->cgi_controller, (struct sockaddr*)&address, sizeof(address)) < 0) return	false;
-	if (listen(this->cgi_controller, 5) < 0) return	false;
-	// std::cout << KCYN"initiating" << KNRM << " connection with master process over unix socket..\n";
-	if ((this->master_PID = fork()) < 0)	return	false;
-	if (!this->master_PID)	master_routine(this->socket_path);
-	if ((this->master_process = ::accept(this->cgi_controller, NULL, NULL)) < 0) return	false;
-	close(this->cgi_controller);
-	// std::cout << "child created" << KGRN << " successfully" << KNRM << " and waiting for jobs in: "
-		// << this->socket_path << std::endl;
-	return	true;
-}
-
-bool	Sockets::update_master_state() {
-	if (this->master_PID < 0 || kill(this->master_PID, 0) < 0) this->active_master = false;
-	else	this->active_master = true;
-	return	this->active_master;
-}
-
 void	Sockets::check_and_remove(std::string target) {
 	struct	stat	output;
 	if (stat(target.c_str(), &output) != 0)	return;
 	std::remove(target.c_str());
 }
 
-Sockets::Sockets( void ) : _sess_id(1234), active_master(0) {
-	std::srand(std::time(NULL));
-	std::cout << CLR_TERM;
-	this->active_master = this->initiate_master_process();
+static	std::string	get_executer(std::pair<std::string, std::string> cgi_info, std::string uri) {
+	if (cgi_info.first.empty() || !access(uri.c_str(), X_OK))	return	uri;
+	if (cgi_info.first == ".py")				return	PYTHON_PATH;
+	if (cgi_info.first == ".php")				return	PHP_PATH;
+	if (cgi_info.first == ".pl" || cgi_info.first == ".pm")	return	PERL_PATH;
+	if (cgi_info.first == ".java" || cgi_info.first == ".jvs")		return	JAVA_PATH;
+	if (cgi_info.first == ".js" || cgi_info.first == ".javascript")	return	JS_PATH;
+	if (cgi_info.first == ".sh")					return	SHELL_PATH;
+	return	uri;
 }
 
-Sockets::~Sockets() {
-	if (DEBUG) {
-		std::cout << KRED"cleaning...\n";
-		std::cout << "deleting unix socket: " << KNRM
-		<< this->socket_path << std::endl;
-	}
+int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string exec, std::string uri, std::string file, std::string env)
+{
+	struct	sockaddr_un	address;
+	int			unix_listener, unix_sock, pid;
+	this->socket_path = SOCKETS_PATH"/unix_quick_private_socket";
 	this->check_and_remove(this->socket_path);
-	if (this->active_master) {
-		if (DEBUG)
-			std::cout << KRED"killing master process\n" << KNRM;
-		close(this->master_process);
-		kill(this->master_PID, SIGKILL);
-	}
-	if (DEBUG)
-		std::cout << KRED"closing active connections..\n" << KNRM;
-	for (std::map<int, ServerConfig*>::iterator i=this->_fd_to_server.begin(); i!=this->_fd_to_server.end();++i)
-		if (i->second && i->second->_socket == i->first)	close(i->first);
+	if ((unix_listener = geta_unix_socket(address, this->socket_path)) < 0) return -1;
+	if (bind(unix_listener, (struct sockaddr*)&address, sizeof(address)) < 0) return -1;
+	if (listen(unix_listener, 5) < 0) return -1;
+	if ((pid = fork()) < 0)	return -1;
+	if (!pid)	master_routine(this->socket_path, exec, uri, file, env);
+	if ((unix_sock = ::accept(unix_listener, NULL, NULL)) < 0)  return -1;
+	close(unix_listener);
+	pr_info->first = pid;
+	return	unix_sock;
 }
 
-std::string	Sockets::execute_script(std::string input) {
-	if (!this->update_master_state())
-		if (!(this->active_master = this->initiate_master_process()))
-			return "webserv_cgi_status=500; CGI child fork() failure";
-	fd_set	r_set; FD_ZERO(&r_set);
-	std::string	output;
-	int	index = 0;
-	for (;;) {
-		index = send(this->master_process, input.c_str(), input.size(), 0);
-		if (index <= 0)	break;
-		input = input.substr(index);
+static	std::string	_conc_(std::string input, char c) {
+	try {
+		int	i(0);
+		while (input[i] == c)
+			input = input.substr(1);
+		i = input.size() - 1;
+		while (input[i] == c) {
+			input = input.substr(0, i - 1);
+			i = input.size() - 1;
+		}
+	return	input;
 	}
-	char	buffer[CGI_PIPE_MAX_SIZE];
-	struct	timeval	tv;
-	std::memset(&tv, 0, sizeof(tv));
-	tv.tv_sec = CGI_TIME_LIMIT;
-	FD_SET(this->master_process, &r_set);
-	index = select(this->master_process + 1, &r_set, NULL, NULL, &tv);
-	if (index <= 0)	return "webserv_cgi_status=504; CGI operation timeout";
-	else
+	catch (std::exception &l)
+	{
+		return	input;
+	}
+}
+
+static	std::string	_cgi_header(std::string input, std::string v_name, std::string v_name_2) {
+		std::string		temp_c_t;
+		size_t	pos = input.find(v_name);
+		if (pos == std::string::npos) pos = input.find(v_name_2);
+		if (pos != std::string::npos) {
+			temp_c_t = input.substr(pos + v_name.size());
+			pos = temp_c_t.find("\n");
+			if (pos != std::string::npos) {
+				temp_c_t = _conc_(temp_c_t.substr(0, pos), ' ');
+				return	temp_c_t;
+			}
+		}
+		return	"";
+}
+
+bool	Sockets::cgi_in( int client, std::pair<Request, Response>* pai, ServerConfig* server) {
+	///////////////////////
+	if (!pai->second._request->_cgi_info.second.empty()) {
+		size_t    pos = pai->second._request->_request.first_line.uri.rfind(pai->second._request->_cgi_info.second);
+		if (pos != std::string::npos)
+			pai->second._request->_request.first_line.uri = pai->second._request->_request.first_line.uri.substr(0, pos);
+	}
+	if (access(pai->second._request->get_first_line().uri.c_str(), R_OK) < 0) {
+		pai->second.target_file = pai->second.generate_status_file(NOT_FOUND, server, "CGI script NOT FOUND");
+		return	false;
+	}
+	std::string	input, to_stdin_input, _file_name;
+	if (pai->second._request->get_first_line().method == "GET" && pai->second._request->_query_string.size()) {
+		for (std::vector<std::pair<std::string, std::string> >::iterator it = pai->second._request->_query_string.begin();
+			it != pai->second._request->_query_string.end(); ++it)
+			input.append(it->first + "=" + it->second + "&");
+	}
+	else if (pai->second._request->get_first_line().method == "POST" && pai->second._request->get_headers().content_type.find("multipart/form-data") != std::string::npos)
+		input.append(pai->second._request->_request.body);
+	else	input.append(pai->second._request->_request.raw_body);
+	_enrg_env_var("CONTENT_LENGTH", std::to_string(input.size()));
+	_enrg_env_var("REQUEST_METHOD", pai->second._request->get_first_line().method);
+	_enrg_env_var("CONTENT_TYPE", pai->second._request->get_headers().content_type);
+	_enrg_env_var("SERVER_NAME", server->server_name);
+	_enrg_env_var("SERVER_PORT", server->listen_port);
+	_enrg_env_var("SERVER_PROTOCOL", "HTTP/1.1");
+	_enrg_env_var("HTTP_COOKIE", pai->second._request->get_headers().cookie);
+	std::string	uri = pai->second._request->get_first_line().uri;
+	if (!pai->second._request->_cgi_info.second.empty()) {
+		_enrg_env_var("PATH_INFO", pai->second._request->_cgi_info.second);
+		if (DEBUG)
+			std::cout << "\t" << KCYN"PATH_INFO: " << KNRM << pai->second._request->_cgi_info.second << std::endl;
+		uri = uri.substr(0, uri.find(pai->second._request->_cgi_info.second));
+	}	else	_enrg_env_var("PATH_INFO", "");
+	_enrg_env_var("REQUEST_URI", uri);
+	if (pai->second._request->get_first_line().method == "GET")	_enrg_env_var("QUERY_STRING", input);
+	else	{ _enrg_env_var("QUERY_STRING", ""); to_stdin_input = input; }
+	try {
+		if (!to_stdin_input.empty()) {
+			_file_name = CGI_COMM"/"+ _generate_random_string(uri, 20);
+			std::fstream	_cgi_file(_file_name, std::ios::out|std::ios::binary);
+			if (!_cgi_file.is_open())	throw std::runtime_error("can\'t setup comm. medium with cgi");
+			_cgi_file << to_stdin_input;
+			_cgi_file.close();
+		}
+		//
+		int			unix_sock;
+		std::pair<int, int>	 	*pr_info = new std::pair<int, int>;
+		if ((unix_sock = this->initiate_master_process(pr_info, get_executer(pai->second._request->_cgi_info, uri),
+				uri, _file_name, this->format_env())) < 0)
+			{delete pr_info; throw std::runtime_error("can\'t create master process");}
+		this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 1);
+		pr_info->second = client;
+		this->_cgi_clients[ unix_sock ] = pr_info;
+		/*std::cout << "CGI_env:" << this->format_env() << std::endl;
+		std::cout << "CGI_executer:" << get_executer(pai->second._request->_cgi_info, uri) << std::endl;
+		std::cout << "CGI_uri:" << uri << std::endl;
+		std::cout << "CGI_STDIN_filename:" << _file_name << std::endl;*/
+	} catch (std::exception &l) {
+		std::cout << KRED << "\tSockets::cgi_in(): just catched:" << l.what() << KNRM << std::endl;
+		pai->second.target_file = pai->second.generate_status_file(INTERNAL_SERVER_ERROR, server, l.what());
+		return	false;
+	}
+	return	true;
+}
+
+void	Sockets::cgi_out(int unix_sock) {
+	/////////////////////////
+	std::map<int, std::pair<int, int> *>::iterator		it = this->_cgi_clients.find( unix_sock );
+	int						client = it->second->second;
+	ServerConfig*					server = this->_fd_to_server.find(client)->second;
+	std::map<int, std::pair<Request, Response> *>::iterator	pai = server->_requests.find(client);
+	std::string					out_file = CGI_COMM"/"
+		+ _generate_random_string(pai->second->second._request->get_headers().host, 15) 
+		+ ".html";
+	std::fstream	_file(out_file, std::ios::out);
+	if (_file.is_open()) {
+		int		n(0);
+		std::string	output;
+		char		buffer[1000];
 		for (;;) {
 			std::memset(buffer, 0, sizeof(buffer));
-			index = recv(this->master_process, buffer, CGI_PIPE_MAX_SIZE -1, MSG_DONTWAIT);
-			if (index <= 0)	break;
-			else	output.append(buffer, index);
+			n = recv(unix_sock, buffer, 1000, MSG_DONTWAIT);
+			if (n <= 0)	break;
+			output.append(buffer, n);
 		}
-	return		output;
+		//////
+		size_t pos = output.find("webserv_cgi_status=");
+		int cgi_status = std::atoi(output.substr(pos+19, pos+22).c_str());
+		output = output.substr(pos+23);
+		if (cgi_status != 200)	out_file = pai->second->second.generate_status_file((e_status)cgi_status, server, output);
+		else {
+			try {
+				std::string	temp_c_t = _cgi_header(output, "Content-type:", "Content-Type:");
+				if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "content-type:", "CONTENT-TYPE:");
+				if (!temp_c_t.empty() && this->is_valid_mime(temp_c_t))
+					pai->second->second._file_type = temp_c_t;
+				temp_c_t = _cgi_header(output, "set-cookie:", "Set-cookie:");
+				if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "Set-Cookie:", "SET-COOKIE:");
+				if (!temp_c_t.empty()) {
+					pai->second->second._cgi_cookie = temp_c_t;
+					pai->second->second._has_cookies = true;
+				}
+				pos = output.find("\r\n\r\n");
+				if (pos != std::string::npos)	output = output.substr(pos + 4);
+				else {
+					pos = output.find("\n\n");
+					if (pos != std::string::npos) output = output.substr(pos + 2);
+					else	throw	std::runtime_error("invalid cgi output formatting");
+				}
+			} catch (std::exception &l) {
+				std::cout << KRED << "\tResponse::process_cgi_exec(): just catched:" << l.what() << KNRM << std::endl;
+				out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, l.what());
+			}
+		}
+		_file << output;
+		_file.close();
+		
+	}
+	else out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, "can\'t create cgi file");
+	pai->second->second.target_file = out_file;
+	pai->second->second._begin_response(*this, server);
+	this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 0);
+	this->_kqueue.SET_QUEUE(client, EVFILT_WRITE, 1);
+	close(unix_sock);
+	//kill(it->second->first, SIGINT);
+	delete	it->second;
+	this->_cgi_clients.erase( it );
 }
+
+///////////////////////////
 
 void	Sockets::accept(int sock_fd) {
 	struct	sockaddr	address;
@@ -265,6 +389,7 @@ void	Sockets::accept(int sock_fd) {
 	this->_kqueue.SET_QUEUE(new_s_fd, EVFILT_READ, 1);
 	if (DEBUG)
 		std::cout << "\t  [" << target->server_name << std::setw(15-target->server_name.size()) << ": Accept connection: " << KGRN << new_s_fd << KNRM << "]" << std::endl;
+	////
 }
 
 
@@ -289,16 +414,22 @@ void	Sockets::recvFrom(int sock_fd) {
 		this->recvFrom( sock_fd );
 		return ;
 	}
-	if (!is_cgi)
-		pai->second->first.recvRequest();
-	else
-		pai->second->first.recvCGIRequest();
-
-	if (!is_cgi && (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR)) {
+	pai->second->first.recvRequest();
+	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
-		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);
-		
-		pai->second->second._initiate_response(&pai->second->first, *this, serv);
+		pai->second->second._request = &pai->second->first;
+		pai->second->second._response_status = pai->second->first.getStatus();
+		//
+		if (pai->second->first.getStatus() == OK
+			&& !pai->second->first._is_return
+			&& pai->second->first._location_type == CGI) {
+			if (this->cgi_in( sock_fd, pai->second, serv ))
+				return ;
+			else	pai->second->second._begin_response(*this, serv);
+		}
+		else	pai->second->second._initiate_response(*this, serv);
+		//
+		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);	
 	}
 	else if (is_cgi) {
 		if (pai->second->first._location_type == CGI
@@ -337,13 +468,20 @@ void	Sockets::sendTo(int sock_fd) {
 }
 
 void	Sockets::closeConn(int sock_fd) {
+	std::map<int, std::pair<int, int>* >::iterator it = this->_cgi_clients.begin();
+	for (; it != this->_cgi_clients.end(); ++it) {
+		if (it->second->second == sock_fd) {
+			kill(it->second->first, SIGINT);
+			close(it->first);
+		}
+	}
+	//
 	this->resetConn(sock_fd);
 	std::map<int, ServerConfig*>::iterator i = this->_fd_to_server.find(sock_fd);
 	if (i != this->_fd_to_server.end()) {
-		if (DEBUG) {
-			std::cout << "\t  [" << i->second->server_name << std::setw(15-i->second->server_name.size()) << ": Closed connection: " << KRED << sock_fd << KNRM;
-			std::cout << " , remaining sockets: " << KBGR " "<< this->_kqueue.get_current_events() << " " << KNRM << "]\n";
-		}
+		if (DEBUG)
+			std::cout << "\t  [" << i->second->server_name << std::setw(15-i->second->server_name.size()) << ": Closed connection: " << KRED << sock_fd << KNRM
+				<< " , remaining sockets: " << KBGR " "<< this->_kqueue.get_current_events() << " " << KNRM << "]\n";
 		this->_fd_to_server.erase(sock_fd);
 	}
 	this->_kqueue.SET_QUEUE(sock_fd, 0, 0);
@@ -355,14 +493,6 @@ void	Sockets::resetConn(int sock_fd) {
 }
 
 void	Sockets::cleanUp() {} // TODO
-
-void	Sockets::incr_sess_id() {
-	size_t	r_num = std::rand() % 1000;
-	if (this->_sess_id + r_num >= ULONG_MAX) this->_sess_id = 0;
-	this->_sess_id += r_num;
-}
-
-size_t	Sockets::get_sess_id() { return this->_sess_id; }
 
 ///////
 
@@ -391,128 +521,12 @@ std::string	_generate_random_string(std::string seed, int length) {
 	return	clean_up_stuff(output, "[\\]^`:;<>=?/ ", "_____________");
 }
 
-int	__calc_new_range(int old_value, int old_min, int old_max, int new_min, int new_max) {
-	if (old_max==old_min||new_min==new_max) return new_min;
-	if (old_value == old_min) return new_min;
-	else if (old_value>old_max) return new_max;
-	return ( ((old_value-old_min)*(new_max-new_min))/(old_max-old_min)+new_min);
-}
-
-static	std::string	s_encryptor(std::string input, std::string key, int mode) {
-	size_t		i=0;
-	while (key.size() < input.size()) { if (i >= key.size()) i = 0; key.append(&key[i]); }
-	for (i=0; i < input.size();i++) input[i]+=mode*13;
-	return	input;
-}
-
-static	std::string	get_cookie_value(std::string input, std::string name)
-{
-	size_t	pos = input.find(name), epos;
-	if (pos == input.npos) return "";
-	pos += name.size();
-	epos = pos;
-	try {
-		if (epos > input.size()) return "";
-		while (epos < input.size() 
-			&& input[epos] != ';' 
-			&& input[epos] != ' ')
-			epos += 1;
-		return	input.substr(pos, epos-pos);
-	}
-	catch (std::exception &l)	{ return ""; }
-}
-
-void		Sockets::check_session(Response &response) {
-	std::string estab_session_id = response._request->get_headers().cookie;
-	std::string user_name = this->form_user_name(*response._request);
-	if (user_name.empty()) {
-		std::cout << "no info on client not registering session\n";
-		return ;
-	}
-	std::string session_id = this->get_cookie(user_name, "session");
-	//
-	if (!estab_session_id.empty()) {
-		std::string cur_session_id = get_cookie_value(estab_session_id, "session=");
-		if (s_encryptor(cur_session_id, user_name, -1) == session_id) {
-			std::cout << "already established/valid session: " << KCYN"[" << cur_session_id << "] <- "<<session_id<<KNRM<<std::endl;
-			response.set_session_id(s_encryptor(cur_session_id, user_name, 1));
-			return ;
-		}
-		else if (!session_id.empty()) {
-			std::cout << "remembering client of their id: " << KCYN"[" << session_id << "]" << KNRM<<std::endl;
-			response._new_session = true;
-			response.set_session_id(s_encryptor(session_id, user_name, 1));
-		}
-	}
-	if (session_id.empty()) {
-		this->incr_sess_id();
-		session_id = std::to_string(this->get_sess_id());
-		this->set_Cookies(user_name, "session=" + session_id + "; ");
-		std::string encr_id = s_encryptor(session_id, user_name, 1);
-		response.set_session_id(encr_id);
-		response._new_session = true;
-		std::cout << "registering a new session: " << KCYN"[" << encr_id << "] <- " << session_id <<KNRM<<std::endl;
-	}
-}
-
 //////
-std::string	Sockets::form_user_name(Request &request) {
-	std::string host, user_agent;
-	if (!request.get_headers().host.empty()) host = clean_up_stuff(request.get_headers().host, ".;=( ):", "##${_}#");
-	if (!request.get_headers().user_agent.empty()) user_agent = clean_up_stuff(request.get_headers().user_agent, ".;=( ):", "##${_}#");
-	return	(host+user_agent);
-}
-
-
-void	Sockets::set_Cookies(std::string client, std::string cookie) {
-	std::map<std::string, std::string>	new_cookies;
-	std::stringstream			input(cookie);
-	std::string			f_half, s_half;
-	char				buffer[cookie.size()];
-	std::memset(buffer, 0, sizeof(buffer));
-
-	size_t	pos = cookie.find("; ");
-	while (input.read(buffer, pos))
-	{
-		std::string buff(buffer);	// something
-		size_t eq_pos = buff.find("=");
-		if (eq_pos != buff.npos) {
-			f_half = buff.substr(0, eq_pos);
-			s_half = buff.substr(eq_pos + 1);
-			if (!f_half.empty()&&!s_half.empty()
-				&&f_half.find_first_not_of(' ')!=f_half.npos
-				&&s_half.find_first_not_of(' ')!=s_half.npos)
-				new_cookies[ f_half ] = s_half;
-		}
-		pos = cookie.substr(pos+2).find("; ");
-		if (pos == cookie.npos)	break;
-		input.get(); input.get();
-	}
-	if (new_cookies.size())		this->_Cookies[ client ] = new_cookies;
-}
-
-std::map<std::string, std::map<std::string, std::string> >::iterator	Sockets::get_Cookies(std::string client) { return this->_Cookies.find( client ); }
-
-std::string	Sockets::get_cookie(std::string client, std::string var) {
-	std::map<std::string, std::map<std::string, std::string> >::iterator it = this->get_Cookies(client);
-	if (it == this->_Cookies.end())	return "";
-	std::map<std::string, std::string>::iterator i = it->second.find(var);
-	if (i == it->second.end())		return "";
-	return i->second;
-}
-
-std::string	Sockets::get_client(std::string name, std::string value) {
-	std::map<std::string, std::map<std::string, std::string> >::iterator it = this->_Cookies.begin();
-	for (; it != this->_Cookies.end(); ++it) {
-		std::map<std::string, std::string>::iterator i = it->second.find(name);
-		if (i != it->second.end() && i->second == value)	return it->first;
-	}
-	return	"";
-}
 
 void	Sockets::kqueueLoop() {
-	std::map<int, ServerConfig*>::iterator	it;
-	int	n;
+	std::map<int, ServerConfig*>::iterator		it;
+	std::map<int, std::pair<int, int>*>::iterator	iit;
+	int					n;
 	for (;;)
 	{
 		struct	kevent	events[ this->_kqueue.get_current_events() ];
@@ -525,9 +539,10 @@ void	Sockets::kqueueLoop() {
 						this->closeConn(events[i].ident);
 				else if (events[i].filter == EVFILT_READ)
 				{
-					it = this->_fd_to_server.find(events[i].ident);
-					if (it != this->_fd_to_server.end() && it->first == it->second->_socket)
+					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket)
 						this->accept(events[i].ident);
+					else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end())
+						this->cgi_out(events[i].ident);
 					else	this->recvFrom(events[i].ident);
 				}
 				else if (events[i].filter == EVFILT_WRITE) 
