@@ -1,6 +1,6 @@
 #include "Sockets.hpp"
 
-Sockets::Sockets(const Sockets &S) {*this = S;}
+Sockets::Sockets(const Sockets &S) {*this = S; this->_main_proc = true;}
 Sockets	&Sockets::operator = (const Sockets &S) { (void)S; return *this;}
 
 void	fix_up_signals(void (*f)(int)) {
@@ -22,23 +22,31 @@ Sockets::Sockets( void ) : active_master(0) {
 }
 
 Sockets::~Sockets() {
-	std::cout << "exit PID:" << std::to_string(getpid()) << std::endl;
-	if (DEBUG) {
+	if (DEBUG && this->_main_proc) {
 		std::cout << KRED"cleaning...\n";
 		std::cout << "deleting unix socket: " << KNRM
 			<< this->socket_path << std::endl;
 	}
 	this->check_and_remove(this->socket_path);
-	if (this->active_master) {
-		if (DEBUG)
+	if (this->active_master && kill(this->active_master, 0) == 0) {
+		if (DEBUG && this->_main_proc)
 			std::cout << KRED"killing master process\n" << KNRM;
 		close(this->master_process);
 		kill(this->master_PID, SIGKILL);
 	}
-	if (DEBUG)
+	if (DEBUG && this->_main_proc)
 		std::cout << KRED"closing active connections..\n" << KNRM;
-	for (std::map<int, ServerConfig*>::iterator i=this->_fd_to_server.begin(); i!=this->_fd_to_server.end();++i)
-		if (i->second && i->second->_socket == i->first)	close(i->first);
+
+	std::set<ServerConfig*>	servers;
+	for (std::map<int, ServerConfig*>::iterator i=this->_fd_to_server.begin(); i!=this->_fd_to_server.end();++i) {
+			close(i->first);
+			servers.insert(i->second);
+	}
+	for(std::set<ServerConfig*>::iterator i=servers.begin(); i!=servers.end();++i) {
+		if (DEBUG && this->_main_proc)
+			std::cout << KRED << "deleting: " << (*i)->server_name << KNRM << std::endl;
+		delete *i;
+	}
 }
 
 ///////////////////////////	CGI
@@ -209,7 +217,8 @@ int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string e
 	if (bind(unix_listener, (struct sockaddr*)&address, sizeof(address)) < 0) return -1;
 	if (listen(unix_listener, 5) < 0) return -1;
 	if ((pid = fork()) < 0)	return -1;
-	if (!pid)	master_routine(this->socket_path, exec, uri, file, env);
+	if (pid == 0)	{this->_main_proc = false; master_routine(this->socket_path, exec, uri, file, env);}
+	this->_main_proc = true;
 	if ((unix_sock = ::accept(unix_listener, NULL, NULL)) < 0)  return -1;
 	close(unix_listener);
 	pr_info->first = pid;
@@ -419,7 +428,7 @@ void	Sockets::recvFrom(int sock_fd) {
 			&& pai->second->first._location_type == CGI) {
 			if (this->cgi_in( sock_fd, pai->second, serv ))
 				return ;
-			else	pai->second->second._begin_response(*this, serv, 1);
+			else	pai->second->second._begin_response(*this, serv, 0);
 		}
 		else	pai->second->second._initiate_response(*this, serv);
 		//
@@ -576,12 +585,12 @@ static int createSocket(struct addrinfo *res, mit it) {
 		sock = socket(tmp->ai_family, tmp->ai_socktype, tmp->ai_protocol);
 		if (sock > 0) {
 			if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) >= 0) {
-				 if (bind(sock, tmp->ai_addr, tmp->ai_addrlen) >= 0) {
+				if (bind(sock, tmp->ai_addr, tmp->ai_addrlen) >= 0)
 					return (sock);
-       			 }
 			}
+			close(sock);
 		}
-		else if (!tmp->ai_next)	return 0;
+		else if (!tmp->ai_next)	return (0);
 		tmp = tmp->ai_next;
 	}
 	return (-1);
@@ -611,14 +620,14 @@ void	Sockets::startServers() {
 					}
 				}
 		}
-		else if (!sock) {
+		else if (sock == 0) {
 			std::cerr << KYEL << "server: " << (*it)->host << ":" << (*it)->listen_port << " is enable to start. socket() failure" << KNRM << std::endl;
 			continue ;
 		}
 		freeaddrinfo(res);
 		if (!this_status) { this_status = true; continue ; }
 		if (listen(sock, 100) < 0)
-			std::cerr << KYEL << "server: " << (*it)->host << ":" << (*it)->listen_port << " is unable to start. listen() failure" << KNRM << std::endl;
+			{std::cerr << KYEL << "server: " << (*it)->host << ":" << (*it)->listen_port << " is unable to start. listen() failure" << KNRM << std::endl; close(sock); continue; }
 		else	std::cout << "\n[" << KGRN << (*it)->server_name << KNRM << ": " << (*it)->host << ":"
 			<< (*it)->listen_port << ", " << (*it)->locations.size() << " locations " << KGRN << "STARTED successfully" << KNRM"]" << std::endl;
 		(*it)->_socket = sock;
@@ -626,8 +635,9 @@ void	Sockets::startServers() {
 		this->_fd_to_server[ sock ] = *it;
 		nbr++;
 	}
-	if (nbr == 0)
+	if (nbr == 0) {
 		throw std::runtime_error(KRED + std::string("No server started") + KNRM);
+	}
 }
 
 void	Sockets::run() {

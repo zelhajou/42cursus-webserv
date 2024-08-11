@@ -57,14 +57,11 @@ struct ServerConfig {
     void	closeConn(int);	// remove entry from _requests
 	public:
     ServerConfig();
-		~ServerConfig();
 };
 
 // Main configuration structure to hold multiple server blocks
 struct MainConfig {
 	std::vector<ServerConfig *>	servers;
-	public:
-		~MainConfig();
 };
 
 # include "Request.hpp"

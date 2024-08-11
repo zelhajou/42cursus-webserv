@@ -68,6 +68,7 @@ MainConfig push_valid_servers(MainConfig &main_config)
 
 int main(int argc, char *argv[], char **env)
 {
+	// atexit(leaks_fun);
 	fix_up_signals(sig_nan);
 	std::string	config_file;
 	if (argc > 2) {

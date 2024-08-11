@@ -387,19 +387,7 @@ void ServerConfig::closeConn(int s)
 ServerConfig::ServerConfig()
 	: is_duplicated(false) {}
 
-ServerConfig::~ServerConfig() {
-	if (DEBUG)
-		std::cout << KRED << "cleaning " << KNRM << this->server_name << " configs\n";
-}
 
-MainConfig::~MainConfig()
-{
-	if (DEBUG)
-		std::cout << KRED << "cleaning " << KNRM << "configuration structure..\n";
-	for (std::vector<ServerConfig *>::iterator i = this->servers.begin(); i != this->servers.end(); ++i) {
-	 	delete *i;
-	}
-}
 void Parser::displayMainConfig(const MainConfig& main_config)
 {
     for (size_t i = 0; i < main_config.servers.size(); ++i)

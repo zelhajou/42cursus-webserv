@@ -4,6 +4,7 @@
 # include <cstring>
 # include <sys/event.h>
 # include <sys/time.h>
+# include <unistd.h>
 
 class KQueue {
 public:

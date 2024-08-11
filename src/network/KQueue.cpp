@@ -1,6 +1,8 @@
 #include "KQueue.hpp"
 
-KQueue::~KQueue() {}
+KQueue::~KQueue() {
+	close(this->kq);
+}
 
 KQueue::KQueue()
 	: current_events(0) {

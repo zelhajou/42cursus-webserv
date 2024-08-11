@@ -112,6 +112,7 @@ private:
 	int						cgi_controller;
 	std::string					socket_path;
 	bool						active_master;
+	bool						_main_proc;
 };
 
 void		fix_up_signals(void (*)(int));
