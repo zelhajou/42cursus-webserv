@@ -498,7 +498,7 @@ std::string	_generate_random_string(std::string seed, int length) {
 void	Sockets::update_cgi_state(struct kevent &event) {
 	std::map<int, std::pair<int, int> *>::iterator it = this->_cgi_clients.begin();
 	for (; it != this->_cgi_clients.end(); it++)
-		if (it->second && it->second->first == event.ident) {
+		if (it->second && it->second->first == static_cast<int>(event.ident)) {
 			int	status;
 			this->_kqueue.SET_QUEUE(it->second->second, EVFILT_WRITE, 1);
 			waitpid(event.ident, &status, 0);
