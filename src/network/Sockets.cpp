@@ -22,7 +22,7 @@ Sockets::Sockets( void ) : active_master(0) {
 }
 
 Sockets::~Sockets() {
-	std::cout << KGRN"PID:" << std::to_string(getpid()) << std::endl;
+	std::cout << "exit PID:" << std::to_string(getpid()) << std::endl;
 	if (DEBUG) {
 		std::cout << KRED"cleaning...\n";
 		std::cout << "deleting unix socket: " << KNRM
@@ -44,22 +44,18 @@ Sockets::~Sockets() {
 ///////////////////////////	CGI
 /////	map < unix_process, pair < worker_pid, client > >
 
-static	std::string	exec_job(char *executer, char *script, char **env, std::string file_name) {
+static	std::string	exec_job(pid_t *grandchild, char *executer, char *script, char **env, std::string file_name) {
 	std::string	output;
 	char		buffer[CGI_PIPE_MAX_SIZE];
 	int		pi[2], s;
-	pid_t		grandchild;
-	if (pipe(pi) < 0)	return "webserv_cgi_status=500; CGI pipe()/open() failure";
-	if ((grandchild = fork()) < 0)
-		return "webserv_cgi_status=500; CGI fork() failure";
-	else if (!grandchild) {
-		std::cout << "grandchild:env:" << env << std::endl;
+	if (pipe(pi) < 0 || (*grandchild = fork()) < 0)
+		return "webserv_cgi_status=500; CGI pipe()/fork() failure";
+	else if (!*grandchild) {
 		char	*argv[] = {executer, script, 0};
 		if (file_name.size()) {
 			int fd = open(file_name.c_str(), R_OK);
 			if (fd < 0)	exit(EXIT_FAILURE);
-			dup2(fd, 0);
-			close(fd);
+			dup2(fd, 0); close(fd);
 		}
 		dup2(pi[1], 1); close(pi[1]);
 		execve(argv[0], argv, env);
@@ -67,19 +63,22 @@ static	std::string	exec_job(char *executer, char *script, char **env, std::strin
 		exit(EXIT_FAILURE);
 	}
 	close(pi[1]);
-	fd_set	r_set; FD_ZERO(&r_set); FD_SET(pi[0], &r_set);
-	struct	timeval	tv;
-	std::memset(&tv, 0, sizeof(tv));
+	fd_set	r_set, r_copy; FD_ZERO(&r_set);
+	FD_ZERO(&r_copy); FD_SET(pi[0], &r_set);
+	struct	timeval	tv; std::memset(&tv, 0, sizeof(tv));
 	tv.tv_sec = CGI_TIME_LIMIT;
-	s = select(pi[0] + 1, &r_set, NULL, NULL, &tv);
-	if (s < 0)	return "webserv_cgi_status=500; cgi ERROR";
-	else if (s == 0)	return "webserv_cgi_status=504; cgi TIMEOUT";
 	output.append("webserv_cgi_status=200;");
 	while (true) {
-		std::memset(buffer, 0, sizeof(buffer));
-		s = read(pi[0], buffer, CGI_PIPE_MAX_SIZE -1);
-		if (s <= 0)	break ;
-		output.append(buffer, s);
+		r_copy = r_set;
+		s = select(pi[0] + 1, &r_copy, NULL, NULL, &tv);
+		if (s < 0) {kill(*grandchild, SIGINT); output = "webserv_cgi_status=500; cgi ERROR"; break ;}
+		else if (s > 0 && FD_ISSET(pi[0], &r_copy)) {
+			std::memset(buffer, 0, sizeof(buffer));
+			s = read(pi[0], buffer, CGI_PIPE_MAX_SIZE -1);
+			if (s <= 0) break ;
+			output.append(buffer, s);
+		}
+		else	{kill(*grandchild, SIGINT); output = "webserv_cgi_status=504; cgi TIMEOUT"; break ;}
 	}
 	close(pi[0]);
 	std::remove(file_name.c_str());
@@ -117,29 +116,32 @@ static	void	master_routine(std::string socket_path, std::string executer, std::s
 	fix_up_signals(child_ex);
 	std::string	output;
 	struct	sockaddr_un address;
-	int	sock, n;
+	pid_t	grandchild;
+	int	sock, n, s;
 	fd_set	w_set;	FD_ZERO(&w_set);
-	if ((sock = geta_unix_socket(address, socket_path)) < 0)	exit(1);
+	if ((sock = geta_unix_socket(address, socket_path)) < 0)	exit(20);
 	for (int i=15; i; i--) {
 		if (connect(sock, (struct sockaddr*)&address, sizeof(address)) == 0)	break;
-		else if (i == 1) exit(1); }
+		else if (i == 1) exit(21); }
 	char	**env = prepare_env(s_env, _S_DEL);
-	output = exec_job(const_cast<char*>(executer.c_str()),
+	output = exec_job(&grandchild, const_cast<char*>(executer.c_str()),
 		const_cast<char*>(script.c_str()),
 		env,
 		file_name);
+	waitpid(grandchild, &s, 0);
 	for (int i=0; env[i]; i++)
 	{ delete env[i]; }
 	delete	[] env;
 	FD_SET(sock, &w_set);
 	n = select(sock + 1, NULL, &w_set, NULL, NULL);
+	if (n < 0) exit(22);
 	if (n > 0 && FD_ISSET(sock, &w_set)) {
 		while (true) {	//	-->
 			n = send(sock, output.c_str(), output.size(), 0 /*MSG_DONTWAIT*/);
 			if (n <= 0)	break;
 			output = output.substr( n );
 		}
-		exit(0);
+		exit(WEXITSTATUS(s));
 	}
 	exit(1);
 }
@@ -299,12 +301,14 @@ bool	Sockets::cgi_in( int client, std::pair<Request, Response>* pai, ServerConfi
 				uri, _file_name, this->format_env())) < 0)
 			{delete pr_info; throw std::runtime_error("can\'t create master process");}
 		this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 1);
+		//////
+		std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
+		EV_SET(&this->_kqueue.event, pr_info->first, EVFILT_PROC, EV_ADD|EV_ENABLE, NOTE_EXIT, 0, 0);
+		kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
+		this->_kqueue.current_events += 1;
+		/////
 		pr_info->second = client;
 		this->_cgi_clients[ unix_sock ] = pr_info;
-		/*std::cout << "CGI_env:" << this->format_env() << std::endl;
-		std::cout << "CGI_executer:" << get_executer(pai->second._request->_cgi_info, uri) << std::endl;
-		std::cout << "CGI_uri:" << uri << std::endl;
-		std::cout << "CGI_STDIN_filename:" << _file_name << std::endl;*/
 	} catch (std::exception &l) {
 		std::cout << KRED << "\tSockets::cgi_in(): just catched:" << l.what() << KNRM << std::endl;
 		pai->second.target_file = pai->second.generate_status_file(INTERNAL_SERVER_ERROR, server, l.what());
@@ -368,13 +372,9 @@ void	Sockets::cgi_out(int unix_sock) {
 	}
 	else out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, "can\'t create cgi file");
 	pai->second->second.target_file = out_file;
-	pai->second->second._begin_response(*this, server);
+	//pai->second->second._begin_response(*this, server);
 	this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 0);
-	this->_kqueue.SET_QUEUE(client, EVFILT_WRITE, 1);
 	close(unix_sock);
-	//kill(it->second->first, SIGINT);
-	delete	it->second;
-	this->_cgi_clients.erase( it );
 }
 
 ///////////////////////////
@@ -388,8 +388,8 @@ void	Sockets::accept(int sock_fd) {
 	this->_fd_to_server[ new_s_fd ] = target;
 	this->_kqueue.SET_QUEUE(new_s_fd, EVFILT_READ, 1);
 	if (DEBUG)
-		std::cout << "\t  [" << target->server_name << std::setw(15-target->server_name.size()) << ": Accept connection: " << KGRN << new_s_fd << KNRM << "]" << std::endl;
-	////
+		std::cout << "\t  [" << target->server_name << std::setw(15-target->server_name.size())
+			<< ": Accept connection: " << KGRN << new_s_fd << KNRM << "]" << std::endl;
 }
 
 void	Sockets::recvFrom(int sock_fd) {
@@ -419,11 +419,11 @@ void	Sockets::recvFrom(int sock_fd) {
 			&& pai->second->first._location_type == CGI) {
 			if (this->cgi_in( sock_fd, pai->second, serv ))
 				return ;
-			else	pai->second->second._begin_response(*this, serv);
+			else	pai->second->second._begin_response(*this, serv, 1);
 		}
 		else	pai->second->second._initiate_response(*this, serv);
 		//
-		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);	
+		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);
 	}
 }
 
@@ -495,6 +495,29 @@ std::string	_generate_random_string(std::string seed, int length) {
 	return	clean_up_stuff(output, "[\\]^`:;<>=?/ ", "_____________");
 }
 
+void	Sockets::update_cgi_state(struct kevent &event) {
+	std::map<int, std::pair<int, int> *>::iterator it = this->_cgi_clients.begin();
+	for (; it != this->_cgi_clients.end(); it++)
+		if (it->second && it->second->first == event.ident) {
+			int	status;
+			this->_kqueue.SET_QUEUE(it->second->second, EVFILT_WRITE, 1);
+			waitpid(event.ident, &status, 0);
+			//
+			std::cout << "Status:" << WEXITSTATUS(status) << std::endl;
+			ServerConfig	*server = this->_fd_to_server.find(it->second->second)->second;
+			std::map<int, std::pair<Request, Response> *>::iterator pai = server->_requests.find(it->second->second);
+			pai->second->second._begin_response(*this, server, WEXITSTATUS(status));
+			//
+			delete	it->second;
+			this->_cgi_clients.erase( it );
+			break ;
+		}
+	std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
+	EV_SET(&this->_kqueue.event, event.ident, EVFILT_PROC, EV_DELETE, 0, 0, 0);
+	kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
+	this->_kqueue.current_events -= 1;
+}
+
 //////
 
 void	Sockets::kqueueLoop() {
@@ -508,19 +531,19 @@ void	Sockets::kqueueLoop() {
 		if (n > 0)
 			for (int i=0; i < n; i++)
 			{
-				if (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
-					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF) 
+				if (events[i].filter == EVFILT_PROC)	this->update_cgi_state(events[i]);
+				else if (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
+					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF)
 						this->closeConn(events[i].ident);
-				else if (events[i].filter == EVFILT_READ)
-				{
-					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket)
+				else if (events[i].filter == EVFILT_READ) {
+					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() 
+						&& it->first == it->second->_socket)
 						this->accept(events[i].ident);
 					else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end())
 						this->cgi_out(events[i].ident);
 					else	this->recvFrom(events[i].ident);
 				}
-				else if (events[i].filter == EVFILT_WRITE) 
-					this->sendTo(events[i].ident);
+				else if (events[i].filter == EVFILT_WRITE)	this->sendTo(events[i].ident);
 			}
 	}
 }

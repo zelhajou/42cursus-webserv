@@ -13,7 +13,7 @@ public:
 	int	CHECK_QUEUE(struct kevent *events);
 	int	get_current_events();
 
-private:
+//private:
 	int		kq;
 	struct	kevent	event;
 	int		current_events;

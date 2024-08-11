@@ -19,7 +19,7 @@ public:
 	~Response();
 
 	void		_initiate_response(Sockets &, ServerConfig*);
-	void		_begin_response(Sockets &, ServerConfig*);
+	void		_begin_response(Sockets &, ServerConfig*, int);
 	void		sendResponse(int, ServerConfig*);
 	size_t		form_headers(ServerConfig*);
 	e_parser_state	get_status();
@@ -27,7 +27,7 @@ public:
 	bool		_new_session;
 	std::string	generate_status_file(e_status, ServerConfig*, std::string);
 	std::string	_connection_type;
-//private:
+
 	std::ifstream		_file;
 	std::string		target_file;
 	size_t			_file_size;
@@ -35,7 +35,6 @@ public:
 	std::string		_cgi_cookie;
 	bool			_has_cookies;
 	std::string		_session_id;
-
 	std::vector<size_t>		_sent;
 	Request			*_request;
 	e_parser_state		status;

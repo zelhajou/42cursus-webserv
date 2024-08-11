@@ -1,5 +1,5 @@
 CURRENT_DIR := $(shell pwd)/
-CXX = c++ #-g -fsanitize=address 
+CXX = c++ -g -fsanitize=address 
 #CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude -D PROJECT_PATH=\"$(CURRENT_DIR)\"
 CXXFLAGS = -std=c++98 -Iinclude -D PROJECT_PATH=\"$(CURRENT_DIR)\"
 SRC_DIR = src

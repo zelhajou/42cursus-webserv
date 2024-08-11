@@ -222,10 +222,11 @@ void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
 	}
 	else	this->target_file = this->generate_status_file(this->_request->getStatus(), server, "");
 	////
-	this->_begin_response(sock, server);
+	this->_begin_response(sock, server, 0);
 }
 
-void	Response::_begin_response(Sockets &sock, ServerConfig *server) {
+void	Response::_begin_response(Sockets &sock, ServerConfig *server, int st) {
+	if (st)	this->target_file = this->generate_status_file(INTERNAL_SERVER_ERROR, server, "CGI: " + std::to_string(st));
 	if (this->_has_body) {
 		this->_file.open(this->target_file, std::ios::in|std::ios::binary);
 		if (!this->_file) {

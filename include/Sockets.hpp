@@ -38,7 +38,7 @@
 # define DEFAULT_CONFIG CONFIG_PATH"/config_files/default.conf"
 # define _S_DEL "__S_"CRLF"_DEL__"
 # define _M_DEL "__M_"CRLF"_DEL__"
-# define CGI_TIME_LIMIT	300	// s
+# define CGI_TIME_LIMIT	10	// s
 # define CGI_PIPE_MAX_SIZE	1000
 # define UNIX_SOCK_BUFFER	8000
 # define PYTHON_PATH	"/usr/local/bin/python3"
@@ -96,6 +96,7 @@ public:
 	bool							is_valid_mime(std::string);
 	bool							cgi_in(int, std::pair<Request, Response>*, ServerConfig*);
 	void							cgi_out(int);
+	void							update_cgi_state(struct kevent&);
 	std::map<std::string, std::string>				env_variables;
 private:
 	MIME						_mime;
@@ -103,9 +104,9 @@ private:
 	KQueue						_kqueue;
 	std::map<int, ServerConfig *>				_fd_to_server;
 	std::map<std::string, ServerConfig *>			_dup_servers;
-	////////////	< unix_process, < worker_pid, client > >
+	//< unix_process, < worker_pid, client > >
 	std::map<int, std::pair<int, int>*>			_cgi_clients;
-	//////////
+	//
 	pid_t						master_PID;
 	int						master_process;
 	int						cgi_controller;
