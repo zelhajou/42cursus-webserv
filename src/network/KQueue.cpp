@@ -7,8 +7,8 @@ KQueue::~KQueue() {
 KQueue::KQueue()
 	: current_events(0) {
 		this->kq = kqueue();
-		if (this->kq < 0)	throw	1;
-	}
+		if (this->kq < 0)	throw std::runtime_error("kqueue() failed");
+}
 
 int	KQueue::get_current_events() { return this->current_events; }
 
