@@ -309,12 +309,15 @@ bool	Sockets::cgi_in( int client, std::pair<Request, Response>* pai, ServerConfi
 		if ((unix_sock = this->initiate_master_process(pr_info, get_executer(pai->second._request->_cgi_info, uri),
 				uri, _file_name, this->format_env())) < 0)
 			{delete pr_info; throw std::runtime_error("can\'t create master process");}
-		this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 1);
+		// this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 1);
+		std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
+		EV_SET(&this->_kqueue.event, unix_sock, EVFILT_READ, EV_ADD|EV_ENABLE, 0, 0, (void *)"unix");
+		kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
 		//////
 		std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
 		EV_SET(&this->_kqueue.event, pr_info->first, EVFILT_PROC, EV_ADD|EV_ENABLE, NOTE_EXIT, 0, 0);
 		kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
-		this->_kqueue.current_events += 1;
+		this->_kqueue.current_events += 2;
 		/////
 		pr_info->second = client;
 		this->_cgi_clients[ unix_sock ] = pr_info;
@@ -542,8 +545,14 @@ void	Sockets::kqueueLoop() {
 			{
 				if (events[i].filter == EVFILT_PROC)	this->update_cgi_state(events[i]);
 				else if (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
-					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF)
-						this->closeConn(events[i].ident);
+					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF) {
+						if (events[i].udata == NULL)
+							this->closeConn(events[i].ident);
+						else {
+							this->_kqueue.SET_QUEUE(events[i].ident, 0, 0);
+							close(events[i].ident);
+						}
+					}
 				else if (events[i].filter == EVFILT_READ) {
 					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() 
 						&& it->first == it->second->_socket)
