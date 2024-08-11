@@ -553,6 +553,7 @@ void	Request::parse_multipart() {
 	std::string		boundary;
 	std::string		section;
 	std::string		line;
+
 	pos = this->_request.raw_body.find(boundary);
 	boundary = this->_request.boundary;
 	while ((pos = this->_request.raw_body.find(boundary)) != std::string::npos) {
@@ -602,7 +603,7 @@ void	Request::handle_post_file(std::string section) {
 	std::string content_type = section.substr(pos + 14, section.find("\r\n") - pos - 14);
 	content_type = content_type.substr(0, content_type.find("\r\n"));
 	section = section.substr(section.find("\r\n\r\n") + 4);
-	section = section.substr(0, section.find_last_of("\r\n"));
+	section = section.substr(0, section.find_last_of("\r\n") - 1);
 	t_post_body post_body = {name, filename, content_type, section};
 	this->_post_body.push_back(post_body);
 }
@@ -613,7 +614,7 @@ void	Request::handle_post_fields(std::string section) {
 	std::string line = section.substr(0, pos);
 	std::string name = get_field_value(line, "name=");
 	section = section.substr(pos + 4);
-	section = section.substr(0, section.find_last_of("\r\n"));
+	section = section.substr(0, section.find_last_of("\r\n") - 1);
 	t_post_body post_body = {name, "", "", section};
 	this->_post_body.push_back(post_body);
 }

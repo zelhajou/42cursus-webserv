@@ -38,7 +38,7 @@
 # define DEFAULT_CONFIG CONFIG_PATH"/config_files/default.conf"
 # define _S_DEL "__S_"CRLF"_DEL__"
 # define _M_DEL "__M_"CRLF"_DEL__"
-# define CGI_TIME_LIMIT	10	// s
+# define CGI_TIME_LIMIT		10	// s
 # define CGI_PIPE_MAX_SIZE	1000
 # define UNIX_SOCK_BUFFER	8000
 # define PYTHON_PATH	"/usr/local/bin/python3"

@@ -226,7 +226,7 @@ void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
 }
 
 void	Response::_begin_response(Sockets &sock, ServerConfig *server, int st) {
-	if (st)	this->target_file = this->generate_status_file(INTERNAL_SERVER_ERROR, server, "CGI: " + std::to_string(st));
+	if (st)	this->target_file = this->generate_status_file(INTERNAL_SERVER_ERROR, server, "");
 	if (this->_has_body) {
 		this->_file.open(this->target_file, std::ios::in|std::ios::binary);
 		if (!this->_file) {
@@ -258,7 +258,7 @@ size_t	Response::form_headers(ServerConfig *server) {
 		this->header.append("Location: "+this->_request->_c_location->return_url.second+CRLF); }
 
 	if (this->_has_cookies)	this->header.append("set-cookie: " + this->_cgi_cookie + " ;" + (this->_new_session ? "" : CRLF));
-	if (this->_new_session)	this->header.append((this->_has_cookies ? std::string("") : std::string("set-cookie: ")) + "session="+ this->_session_id + "; "CRLF);
+	if (this->_new_session)	this->header.append((this->_has_cookies ? std::string("") : std::string("set-cookie: ")) + "session="+ this->_session_id + "; " + CRLF);
 	//
 	if (this->_has_body) {
 		this->header.append("Content-type: " + this->_file_type + CRLF);

@@ -503,7 +503,7 @@ void	Sockets::update_cgi_state(struct kevent &event) {
 			this->_kqueue.SET_QUEUE(it->second->second, EVFILT_WRITE, 1);
 			waitpid(event.ident, &status, 0);
 			//
-			std::cout << "Status:" << WEXITSTATUS(status) << std::endl;
+			// std::cout << "Status:" << WEXITSTATUS(status) << std::endl;
 			ServerConfig	*server = this->_fd_to_server.find(it->second->second)->second;
 			std::map<int, std::pair<Request, Response> *>::iterator pai = server->_requests.find(it->second->second);
 			pai->second->second._begin_response(*this, server, WEXITSTATUS(status));
