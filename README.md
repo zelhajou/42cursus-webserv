@@ -795,8 +795,8 @@ a SYN-ACK packet to the client.
 		```
 
 	- **Response Headers**:
- 
-		![anatomy-http-request](https://github.com/user-attachments/assets/495684b4-9e4b-483a-9158-bf8d85589691)
+
+   		![anatomy-http-response (1)](https://github.com/user-attachments/assets/5cbafac7-d89b-44f0-84cc-8d958cb19f97)
  		![response-headers](https://github.com/user-attachments/assets/38aa53ff-3133-428e-8e0d-ecfbfc050aa0)
  
    		**Example**:
@@ -836,9 +836,10 @@ a SYN-ACK packet to the client.
 	- [HTTP Headers - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers)
 
 
+---
 
-	- [C++ Network Programming Part 1: Sockets](https://youtu.be/gntyAFoZp-E)
-	- [Sockets in Operating System](https://youtu.be/uagKTbohimU)
-	- [Socket Programming in C/C++ - GeeksforGeeks](https://www.geeksforgeeks.org/socket-programming-cc/)
-	- [Socket Programming in C - Tutorialspoint](https://www.tutorialspoint.com/unix_sockets/socket_server_example.htm)
-	- [Sockets and Pipes Look Like Files (Unix/fdopen)](https://youtu.be/il4N6KjVQ-s)
+- [C++ Network Programming Part 1: Sockets](https://youtu.be/gntyAFoZp-E)
+- [Sockets in Operating System](https://youtu.be/uagKTbohimU)
+- [Socket Programming in C/C++ - GeeksforGeeks](https://www.geeksforgeeks.org/socket-programming-cc/)
+- [Socket Programming in C - Tutorialspoint](https://www.tutorialspoint.com/unix_sockets/socket_server_example.htm)
+- [Sockets and Pipes Look Like Files (Unix/fdopen)](https://youtu.be/il4N6KjVQ-s)
