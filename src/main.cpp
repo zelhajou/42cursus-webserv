@@ -6,7 +6,7 @@
 /*   By: zelhajou <zelhajou@student.1337.ma>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/07/08 17:42:18 by zelhajou          #+#    #+#             */
-/*   Updated: 2024/08/11 02:34:42 by beddinao         ###   ########.fr       */
+/*   Updated: 2024/08/12 02:01:36 by beddinao         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -68,7 +68,7 @@ MainConfig push_valid_servers(MainConfig &main_config)
 
 int main(int argc, char *argv[], char **env)
 {
-	// atexit(leaks_fun);
+	atexit(leaks_fun);
 	fix_up_signals(sig_nan);
 	std::string	config_file;
 	if (argc > 2) {

@@ -95,7 +95,7 @@ public:
 	std::string						format_env();
 	bool							is_valid_mime(std::string);
 	bool							cgi_in(int, std::pair<Request, Response>*, ServerConfig*);
-	void							cgi_out(int);
+	void							cgi_out(struct kevent &);
 	void							update_cgi_state(struct kevent&);
 	std::map<std::string, std::string>				env_variables;
 private:

@@ -148,50 +148,6 @@ static	int	file_to_disk(std::string content, std::string path, std::string filen
 	return	1;
 }
 
-// static	std::string	_conc_(std::string input, char c) {
-// 	try {
-// 		int	i(0);
-// 		while (input[i] == c)
-// 			input = input.substr(1);
-// 		i = input.size() - 1;
-// 		while (input[i] == c) {
-// 			input = input.substr(0, i - 1);
-// 			i = input.size() - 1;
-// 		}
-// 		return	input;
-// 	}
-// 	catch (std::exception &l)
-// 	{
-// 		return	input;
-// 	}
-// }
-
-// static	std::string	_cgi_header(std::string input, std::string v_name, std::string v_name_2) {
-// 		std::string		temp_c_t;
-// 		size_t	pos = input.find(v_name);
-// 		if (pos == std::string::npos) pos = input.find(v_name_2);
-// 		if (pos != std::string::npos) {
-// 			temp_c_t = input.substr(pos + v_name.size());
-// 			pos = temp_c_t.find("\n");
-// 			if (pos != std::string::npos) {
-// 				temp_c_t = _conc_(temp_c_t.substr(0, pos), ' ');
-// 				return	temp_c_t;
-// 			}
-// 		}
-// 		return	"";
-// }
-
-// static	std::string	get_executer(std::pair<std::string, std::string> cgi_info, std::string uri) {
-// 	if (cgi_info.first.empty() || !access(uri.c_str(), X_OK))	return	uri;
-// 	if (cgi_info.first == ".py")				return	PYTHON_PATH;
-// 	if (cgi_info.first == ".php")				return	PHP_PATH;
-// 	if (cgi_info.first == ".pl" || cgi_info.first == ".pm")	return	PERL_PATH;
-// 	if (cgi_info.first == ".java" || cgi_info.first == ".jvs")		return	JAVA_PATH;
-// 	if (cgi_info.first == ".js" || cgi_info.first == ".javascript")	return	JS_PATH;
-// 	if (cgi_info.first == ".sh")					return	SHELL_PATH;
-// 	return	uri;
-// }
-
 void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
 	if (this->_request->getStatus() == OK && !this->_request->_is_return) {
 		if (this->_request->_location_type == CGI) {/*hold_it*/}

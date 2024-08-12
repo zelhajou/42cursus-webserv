@@ -16,7 +16,7 @@ static	void	child_ex(int sig_num) {
 	exit(sig_num);
 }
 
-Sockets::Sockets( void ) : active_master(0) {
+Sockets::Sockets( void ) : active_master(0), _main_proc(true) {
 	std::srand(std::time(NULL));
 	std::cout << CLR_TERM;
 }
@@ -145,7 +145,7 @@ static	void	master_routine(std::string socket_path, std::string executer, std::s
 	if (n < 0) exit(22);
 	if (n > 0 && FD_ISSET(sock, &w_set)) {
 		while (true) {	//	-->
-			n = send(sock, output.c_str(), output.size(), 0 /*MSG_DONTWAIT*/);
+			n = send(sock, output.c_str(), output.size(), 0/*MSG_DONTWAIT*/);
 			if (n <= 0)	break;
 			output = output.substr( n );
 		}
@@ -176,10 +176,10 @@ void	Sockets::_initiate_env_variables(char **env) {
 		for (int i=0; i<size; i++) {
 			std::string	temp(env[i]);
 			pos = temp.find("=");
-			if (pos == temp.npos)	continue;
+			if (pos == temp.npos) continue;
 			f_half = temp.substr(0, pos);
 			s_half = temp.substr(pos + 1);
-			if (f_half.empty() || s_half.empty())	continue;
+			if (f_half.empty() || s_half.empty()) continue;
 			this->env_variables[ f_half ] = s_half;
 		}
 	}
@@ -309,16 +309,14 @@ bool	Sockets::cgi_in( int client, std::pair<Request, Response>* pai, ServerConfi
 		if ((unix_sock = this->initiate_master_process(pr_info, get_executer(pai->second._request->_cgi_info, uri),
 				uri, _file_name, this->format_env())) < 0)
 			{delete pr_info; throw std::runtime_error("can\'t create master process");}
-		// this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 1);
 		std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
 		EV_SET(&this->_kqueue.event, unix_sock, EVFILT_READ, EV_ADD|EV_ENABLE, 0, 0, (void *)"unix");
 		kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
 		//////
 		std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
-		EV_SET(&this->_kqueue.event, pr_info->first, EVFILT_PROC, EV_ADD|EV_ENABLE, NOTE_EXIT, 0, 0);
+		EV_SET(&this->_kqueue.event, pr_info->first, EVFILT_PROC, EV_ADD|EV_ENABLE, NOTE_EXIT, 0, (void *)"pid");
 		kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
 		this->_kqueue.current_events += 2;
-		/////
 		pr_info->second = client;
 		this->_cgi_clients[ unix_sock ] = pr_info;
 	} catch (std::exception &l) {
@@ -329,64 +327,89 @@ bool	Sockets::cgi_in( int client, std::pair<Request, Response>* pai, ServerConfi
 	return	true;
 }
 
-void	Sockets::cgi_out(int unix_sock) {
+void	Sockets::cgi_out(struct kevent &event) {
 	/////////////////////////
+	int	unix_sock = event.ident;
 	std::map<int, std::pair<int, int> *>::iterator		it = this->_cgi_clients.find( unix_sock );
 	int						client = it->second->second;
 	ServerConfig*					server = this->_fd_to_server.find(client)->second;
 	std::map<int, std::pair<Request, Response> *>::iterator	pai = server->_requests.find(client);
-	std::string					out_file = CGI_COMM"/"
-		+ _generate_random_string(pai->second->second._request->get_headers().host, 15) 
-		+ ".html";
-	std::fstream	_file(out_file, std::ios::out);
-	if (_file.is_open()) {
-		int		n(0);
-		std::string	output;
-		char		buffer[1000];
-		for (;;) {
-			std::memset(buffer, 0, sizeof(buffer));
-			n = recv(unix_sock, buffer, 1000, MSG_DONTWAIT);
-			if (n <= 0)	break;
-			output.append(buffer, n);
-		}
-		//////
-		size_t pos = output.find("webserv_cgi_status=");
-		int cgi_status = std::atoi(output.substr(pos+19, pos+22).c_str());
-		output = output.substr(pos+23);
-		if (cgi_status != 200)	out_file = pai->second->second.generate_status_file((e_status)cgi_status, server, output);
-		else {
-			try {
-				std::string	temp_c_t = _cgi_header(output, "Content-type:", "Content-Type:");
-				if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "content-type:", "CONTENT-TYPE:");
-				if (!temp_c_t.empty() && this->is_valid_mime(temp_c_t))
-					pai->second->second._file_type = temp_c_t;
-				temp_c_t = _cgi_header(output, "set-cookie:", "Set-cookie:");
-				if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "Set-Cookie:", "SET-COOKIE:");
-				if (!temp_c_t.empty()) {
-					pai->second->second._cgi_cookie = temp_c_t;
-					pai->second->second._has_cookies = true;
-				}
-				pos = output.find("\r\n\r\n");
-				if (pos != std::string::npos)	output = output.substr(pos + 4);
-				else {
-					pos = output.find("\n\n");
-					if (pos != std::string::npos) output = output.substr(pos + 2);
-					else	throw	std::runtime_error("invalid cgi output formatting");
-				}
-			} catch (std::exception &l) {
-				std::cout << KRED << "\tResponse::process_cgi_exec(): just catched:" << l.what() << KNRM << std::endl;
-				out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, l.what());
+	std::string		out_file;
+	///
+	if (event.flags & EV_ERROR || event.fflags & EV_ERROR
+		|| event.flags & EV_EOF || event.fflags & EV_EOF) 
+		out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, "cgi stuff");
+	else {
+		out_file = CGI_COMM"/" + _generate_random_string(pai->second->second._request->get_headers().host, 15) + ".html";
+		std::fstream	_file(out_file, std::ios::out);
+		if (_file.is_open()) {
+			int		n(0);
+			std::string	output;
+			char		buffer[1000];
+			for (;;) {
+				std::memset(buffer, 0, sizeof(buffer));
+				n = recv(unix_sock, buffer, 1000, MSG_DONTWAIT);
+				if (n <= 0)	break;
+				output.append(buffer, n);
 			}
+			//////
+			size_t pos = output.find("webserv_cgi_status=");
+			int cgi_status = std::atoi(output.substr(pos+19, pos+22).c_str());
+			output = output.substr(pos+23);
+			if (cgi_status != 200)	out_file = pai->second->second.generate_status_file((e_status)cgi_status, server, output);
+			else {
+				try {
+					std::string	temp_c_t = _cgi_header(output, "Content-type:", "Content-Type:");
+					if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "content-type:", "CONTENT-TYPE:");
+					if (!temp_c_t.empty() && this->is_valid_mime(temp_c_t))
+						pai->second->second._file_type = temp_c_t;
+					temp_c_t = _cgi_header(output, "set-cookie:", "Set-cookie:");
+					if (temp_c_t.empty()) temp_c_t = _cgi_header(output, "Set-Cookie:", "SET-COOKIE:");
+					if (!temp_c_t.empty()) {
+						pai->second->second._cgi_cookie = temp_c_t;
+						pai->second->second._has_cookies = true;
+					}
+					pos = output.find("\r\n\r\n");
+					if (pos != std::string::npos)	output = output.substr(pos + 4);
+					else {
+						pos = output.find("\n\n");
+						if (pos != std::string::npos) output = output.substr(pos + 2);
+						else	throw	std::runtime_error("invalid cgi output formatting");
+					}
+				} catch (std::exception &l) {
+					std::cout << KRED << "\tResponse::process_cgi_exec(): just catched:" << l.what() << KNRM << std::endl;
+					out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, l.what());
+				}
+			}
+			_file << output;
+			_file.close();
+			
 		}
-		_file << output;
-		_file.close();
-		
+		else out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, "can\'t create cgi file");
 	}
-	else out_file = pai->second->second.generate_status_file(INTERNAL_SERVER_ERROR, server, "can\'t create cgi file");
 	pai->second->second.target_file = out_file;
-	//pai->second->second._begin_response(*this, server);
 	this->_kqueue.SET_QUEUE(unix_sock, EVFILT_READ, 0);
 	close(unix_sock);
+}
+
+void	Sockets::update_cgi_state(struct kevent &event) {
+	std::map<int, std::pair<int, int> *>::iterator it = this->_cgi_clients.begin();
+	for (; it != this->_cgi_clients.end(); it++)
+		if (it->second && it->second->first == static_cast<int>(event.ident)) {
+			int	status;
+			this->_kqueue.SET_QUEUE(it->second->second, EVFILT_WRITE, 1);
+			waitpid(event.ident, &status, 0);
+			ServerConfig	*server = this->_fd_to_server.find(it->second->second)->second;
+			std::map<int, std::pair<Request, Response> *>::iterator pai = server->_requests.find(it->second->second);
+			pai->second->second._begin_response(*this, server, WEXITSTATUS(status));
+			delete	it->second;
+			this->_cgi_clients.erase( it );
+			break ;
+		}
+	std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
+	EV_SET(&this->_kqueue.event, event.ident, EVFILT_PROC, EV_DELETE, 0, 0, 0);
+	kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
+	this->_kqueue.current_events -= 1;
 }
 
 ///////////////////////////
@@ -507,29 +530,6 @@ std::string	_generate_random_string(std::string seed, int length) {
 	return	clean_up_stuff(output, "[\\]^`:;<>=?/ ", "_____________");
 }
 
-void	Sockets::update_cgi_state(struct kevent &event) {
-	std::map<int, std::pair<int, int> *>::iterator it = this->_cgi_clients.begin();
-	for (; it != this->_cgi_clients.end(); it++)
-		if (it->second && it->second->first == static_cast<int>(event.ident)) {
-			int	status;
-			this->_kqueue.SET_QUEUE(it->second->second, EVFILT_WRITE, 1);
-			waitpid(event.ident, &status, 0);
-			//
-			// std::cout << "Status:" << WEXITSTATUS(status) << std::endl;
-			ServerConfig	*server = this->_fd_to_server.find(it->second->second)->second;
-			std::map<int, std::pair<Request, Response> *>::iterator pai = server->_requests.find(it->second->second);
-			pai->second->second._begin_response(*this, server, WEXITSTATUS(status));
-			//
-			delete	it->second;
-			this->_cgi_clients.erase( it );
-			break ;
-		}
-	std::memset(&this->_kqueue.event, 0, sizeof(this->_kqueue.event));
-	EV_SET(&this->_kqueue.event, event.ident, EVFILT_PROC, EV_DELETE, 0, 0, 0);
-	kevent(this->_kqueue.kq, &this->_kqueue.event, 1, NULL, 0, NULL);
-	this->_kqueue.current_events -= 1;
-}
-
 //////
 
 void	Sockets::kqueueLoop() {
@@ -543,25 +543,21 @@ void	Sockets::kqueueLoop() {
 		if (n > 0)
 			for (int i=0; i < n; i++)
 			{
-				if (events[i].filter == EVFILT_PROC)	this->update_cgi_state(events[i]);
-				else if (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
-					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF) {
-						if (events[i].udata == NULL)
-							this->closeConn(events[i].ident);
-						else {
-							this->_kqueue.SET_QUEUE(events[i].ident, 0, 0);
-							close(events[i].ident);
-						}
-					}
+				if (!events[i].udata && (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
+					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF)) 
+					this->closeConn(events[i].ident);
 				else if (events[i].filter == EVFILT_READ) {
-					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() 
-						&& it->first == it->second->_socket)
+					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket) 
 						this->accept(events[i].ident);
-					else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end())
-						this->cgi_out(events[i].ident);
-					else	this->recvFrom(events[i].ident);
+					else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end()) 
+						this->cgi_out(events[i]);
+					else 
+						this->recvFrom(events[i].ident);
 				}
-				else if (events[i].filter == EVFILT_WRITE)	this->sendTo(events[i].ident);
+				else if (events[i].filter == EVFILT_WRITE) 
+					this->sendTo(events[i].ident);
+				else if (events[i].filter == EVFILT_PROC) 
+					this->update_cgi_state(events[i]);
 			}
 	}
 }
