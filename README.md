@@ -765,22 +765,23 @@ a SYN-ACK packet to the client.
 
 5. **HTTP Protocol**: A protocol that allows web browsers and servers to communicate over the internet.
 
-	![whats-http](https://github.com/user-attachments/assets/d6f06e60-fa31-45db-8d28-bb311939e5fc)
+| <img src="https://github.com/user-attachments/assets/d6f06e60-fa31-45db-8d28-bb311939e5fc" alt="whats-http" width="400"/> | <img src="https://github.com/user-attachments/assets/d80b4962-f449-45ec-abb7-a64298b86d6e" alt="http2" width="400"/> |
+|:-------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------:|
 
- 	![http2](https://github.com/user-attachments/assets/d80b4962-f449-45ec-abb7-a64298b86d6e)
 
 
 - [Everything you need to know about HTTP](https://cs.fyi/guide/http-in-depth)
 
 	- **Request Methods**:
+   
+		<img src="https://github.com/user-attachments/assets/989fabcb-05e4-4859-ad08-f6a1f99b0795" alt="request-methods-1" width="400"/>
  
-  		![request-methods-1](https://github.com/user-attachments/assets/989fabcb-05e4-4859-ad08-f6a1f99b0795)
 		
 	- **Request Headers**:
 
-   		![request-headers](https://github.com/user-attachments/assets/4f3f6eb4-65bb-4fe5-8335-2dcdb74e6856)
+		|  <img src="https://github.com/user-attachments/assets/a43fe18d-c745-4bbf-a13c-ee3a75ee1d2c" alt="anatomy-http-request" width="400"/>  |  <img src="https://github.com/user-attachments/assets/4f3f6eb4-65bb-4fe5-8335-2dcdb74e6856" alt="request-headers" width="400"/>|
+		|:-----------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------:|
 
-		![anatomy-http-request](https://github.com/user-attachments/assets/a43fe18d-c745-4bbf-a13c-ee3a75ee1d2c)
  
 		**Example**:
 
@@ -795,10 +796,10 @@ a SYN-ACK packet to the client.
 		```
 
 	- **Response Headers**:
+   
+		| <img src="https://github.com/user-attachments/assets/5cbafac7-d89b-44f0-84cc-8d958cb19f97" alt="anatomy-http-response" width="400"/> | <img src="https://github.com/user-attachments/assets/38aa53ff-3133-428e-8e0d-ecfbfc050aa0" alt="response-headers" width="400"/> |
+		|:-------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------:|
 
-   		![anatomy-http-response (1)](https://github.com/user-attachments/assets/5cbafac7-d89b-44f0-84cc-8d958cb19f97)
- 		![response-headers](https://github.com/user-attachments/assets/38aa53ff-3133-428e-8e0d-ecfbfc050aa0)
- 
    		**Example**:
 
 		```bash
@@ -817,8 +818,8 @@ a SYN-ACK packet to the client.
 		```
 
 	- **Status Codes**:
-   
-		![status-codes](https://github.com/user-attachments/assets/e3c779ac-e364-4bd0-90e0-7a9f334c7313)
+
+ 		<img src="https://github.com/user-attachments/assets/e3c779ac-e364-4bd0-90e0-7a9f334c7313" alt="status-codes" width="400"/>
 
 	- **HTTP/1.1**:
 		- **Persistent Connections**: Allows multiple requests and responses to be sent over a single connection.
