@@ -379,10 +379,12 @@ The configuration management and logging component are responsible for reading a
 
 - [What is a Server? (Deepdive)](https://youtu.be/VXmvM2QtuMU)
 - [Web Server Concepts and Examples](https://www.youtube.com/watch?v=9J1nJOivdyw&t=313s)
-
 - [Coding a Web Server in 25 Lines - Computerphile](https://www.youtube.com/watch?v=7GBlCinu9yg)
 
 **Endianess**: The order in which bytes are stored in memory.
+
+![little-big-endian](https://github.com/user-attachments/assets/3257c5e5-403d-47db-9bc2-f0ccdb79846e)
+
 - **Big-endian**: Most significant byte is stored at the lowest memory address.
 - **Little-endian**: Least significant byte is stored at the lowest memory address.
 
@@ -396,10 +398,16 @@ The configuration management and logging component are responsible for reading a
 1. **TCP/IP Protocol Suite**: A set of protocols that allows two or more devices to communicate over a network.
 
 	- **IP (Internet Protocol)**:
+
+   		![ip](https://github.com/user-attachments/assets/f9a63716-3a70-494a-9926-cbdeab056f76)
+   
 		- An IP address is a unique identifier for a device on a network.
 		- IPv4 addresses are 32-bit numbers usually represented in dotted-decimal format (e.g., 192.168.1.1).
 		- IPv6 addresses are 128-bit numbers represented in hexadecimal (e.g., 2001:0db8:85a3:0000:0000:8a2e:0370:7334).
 	- **TCP (Transmission Control Protocol)**:
+
+		![tcp-1](https://github.com/user-attachments/assets/f37c6f88-a2e9-406c-a358-d211d0022e8d)
+
 		- A connection-oriented protocol that provides reliable, ordered, and error-checked delivery of a stream of bytes.
 		- **Three-way handshake**:
 			1. Client sends a SYN packet to the server.
@@ -425,7 +433,10 @@ The configuration management and logging component are responsible for reading a
 		- **Dynamic ports**:
 			- Ports ranging from 49152 to 65535 are used for private or temporary purposes.
 	- **Socket**:
-		- A socket is an endpoint for communication between two machines.
+
+	  	![sockets](https://github.com/user-attachments/assets/5e79d8ba-469a-489b-b4cf-9eb9ba762fa4)
+
+   		- A socket is an endpoint for communication between two machines.
 		- A socket is identified by an IP address and a port number.
 		- **Server socket**:
 			- A server socket listens for incoming connections.
@@ -447,7 +458,11 @@ The configuration management and logging component are responsible for reading a
 		- **Client socket**:
 			- A client socket initiates a connection to a server socket.
 	- **TCP Server-Client**:
-		- **Server**:
+		- <details>
+			<summary>
+				Server
+			</summary>
+			
 			1. Create a socket using the `socket()` system call.
 				```c
 				int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -494,7 +509,12 @@ The configuration management and logging component are responsible for reading a
 				// recv(): Receives data from the connected socket.
 				// buffer: Buffer to store received data.
 				```
-		- **Client**:
+   		</details>
+  
+   		- <details>
+			<summary>
+				Client:
+			</summary>
 			1. Create a socket using the `socket()` system call.
 				```c
 				int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -524,8 +544,16 @@ The configuration management and logging component are responsible for reading a
 				// recv(): Receives data from the connected socket.
 				// buffer: Buffer to store received data.
 				```
+     		</details>
+
+
 	- **UDP Server-Client**:
-		- **Server**:
+
+		- <details>
+			<summary>
+				Server:
+			</summary>
+			
 			1. Create a socket using the `socket()` system call.
 				```c
 				int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -560,7 +588,13 @@ The configuration management and logging component are responsible for reading a
 				// sendto(): Sends data to a specific address.
 				// recvfrom(): Receives data from a specific address.
 				```
-		- **Client**:
+		</details>
+  
+  		- <details>
+			<summary>
+				Client:
+			</summary>
+			
 			1. Create a socket using the `socket()` system call.
 				```c
 				int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -577,7 +611,8 @@ The configuration management and logging component are responsible for reading a
 				// sendto(): Sends data to a specific address.
 				// recvfrom(): Receives data from a specific address.
 				```
-3. **TCP/IP Communication**: The process of establishing a connection between two devices using the TCP/IP protocol suite.
+    		</details>
+2. **TCP/IP Communication**: The process of establishing a connection between two devices using the TCP/IP protocol suite.
 
 	- **Three-way handshake**:
 		1. Client sends a SYN packet to the server.
