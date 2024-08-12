@@ -765,20 +765,26 @@ a SYN-ACK packet to the client.
 
 5. **HTTP Protocol**: A protocol that allows web browsers and servers to communicate over the internet.
 
+	![whats-http](https://github.com/user-attachments/assets/d6f06e60-fa31-45db-8d28-bb311939e5fc)
+
+ 	![http2](https://github.com/user-attachments/assets/d80b4962-f449-45ec-abb7-a64298b86d6e)
+
+
 - [Everything you need to know about HTTP](https://cs.fyi/guide/http-in-depth)
 
 	- **Request Methods**:
-		- **GET**: Requests data from a server.
-		- **POST**: Submits data to a server.
-		- **PUT**: Updates data on a server.
-		- **DELETE**: Deletes data from a server.
-		- **HEAD**: Requests headers from a server.
-		- **OPTIONS**: Requests supported methods from a server.
-		- **TRACE**: Echoes a request back to a client.
-		- **CONNECT**: Converts the request connection to a transparent TCP/IP tunnel.
+ 
+  		![request-methods-1](https://github.com/user-attachments/assets/989fabcb-05e4-4859-ad08-f6a1f99b0795)
 		
 	- **Request Headers**:
-		```http
+
+   		![request-headers](https://github.com/user-attachments/assets/4f3f6eb4-65bb-4fe5-8335-2dcdb74e6856)
+
+		![anatomy-http-request](https://github.com/user-attachments/assets/a43fe18d-c745-4bbf-a13c-ee3a75ee1d2c)
+ 
+		**Example**:
+
+		```bash
 		GET /index.html HTTP/1.1
 		Host: www.example.com
 		User-Agent: Mozilla/5.0
@@ -787,15 +793,15 @@ a SYN-ACK packet to the client.
 		Accept-Encoding: gzip, deflate
 		Connection: keep-alive
 		```
-		- **Host**: Specifies the domain name of the server.
-		- **User-Agent**: Specifies the user agent making the request.
-		- **Accept**: Specifies the media types accepted by the client.
-		- **Accept-Language**: Specifies the languages accepted by the client.
-		- **Accept-Encoding**: Specifies the encodings accepted by the client.
-		- **Connection**: Specifies the connection type.
-.
+
 	- **Response Headers**:
-		```http
+ 
+		![anatomy-http-request](https://github.com/user-attachments/assets/495684b4-9e4b-483a-9158-bf8d85589691)
+ 		![response-headers](https://github.com/user-attachments/assets/38aa53ff-3133-428e-8e0d-ecfbfc050aa0)
+ 
+   		**Example**:
+
+		```bash
 		HTTP/1.1 200 OK
 		Date: Mon, 01 Jan 2022 00:00:00 GMT
 		Server: Apache/2.4.51
@@ -803,74 +809,17 @@ a SYN-ACK packet to the client.
 		Content-Length: 13
 		Connection: keep-alive
 		Set-Cookie: session=123
-		Cache-Control: no-cache
 		Last-Modified: Mon, 01 Jan 2022 00:00:00 GMT
 		Location: /index.html
-		WWW-Authenticate: Basic realm="Restricted"
-		Content-Encoding: gzip
 		Content-Language: en-US
-		Content-Disposition: attachment; filename="example.html"
-		Content-Security-Policy: default-src 'self'
-		Strict-Transport-Security: max-age=31536000
-		X-Content-Type-Options: nosniff
 		X-Frame-Options: DENY
 		X-XSS-Protection: 1; mode=block
-		Referrer-Policy: no-referrer
-		Feature-Policy: geolocation 'none'
-		Expect-CT: max-age=86400, enforce
-		Alt-Svc: h2=":443"; ma=2592000
-		Public-Key-Pins: pin-sha256="base64=="; max-age=5184000; includeSubDomains
-		Content-Security-Policy-Report-Only: default-src 'self'; report-uri /report
-		Expect-CT: max-age=86400, enforce
-		Alt-Svc: h2=":443"; ma=2592000
-		Public-Key-Pins: pin-sha256="base64=="; max-age=5184000; includeSubDomains
 		```
-		- **Date**: Specifies the date and time of the response.
-		- **Server**: Specifies the server software.
-		- **Content-Type**: Specifies the media type of the response body.
-		- **Content-Length**: Specifies the length of the response body.
-		- **Connection**: Specifies the connection type.
-		- **Set-Cookie**: Specifies the cookies sent by the server.
-		- **Cache-Control**: Specifies the caching directives.
-		- **Last-Modified**: Specifies the date and time of the last modification.
-		- **Location**: Specifies the URL for redirection.
-		- **WWW-Authenticate**: Specifies the authentication method.
-		- **Content-Encoding**: Specifies the encoding of the response body.
-		- **Content-Language**: Specifies the language of the response body.
-		- **Content-Disposition**: Specifies the disposition of the response body.
-		- **Content-Security-Policy**: Specifies the security policy.
-		- **Strict-Transport-Security**: Specifies the transport security policy.
-		- **X-Content-Type-Options**: Specifies the content type options.
-		- **X-Frame-Options**: Specifies the frame options.
-		- **X-XSS-Protection**: Specifies the XSS protection.
-		- **Referrer-Policy**: Specifies the referrer policy.
-		- **Feature-Policy**: Specifies the feature policy.
-		- **Expect-CT**: Specifies the Certificate Transparency policy.
-		- **Alt-Svc**: Specifies the alternative services.
-		- **Public-Key-Pins**: Specifies the public key pins.
+
 	- **Status Codes**:
-		- **1xx (Informational)**:
-			- **100 Continue**: The server has received the request headers and will wait for the request body.
-			- **101 Switching Protocols**: The server has agreed to switch protocols.
-		- **2xx (Success)**:
-			- **200 OK**: The request was successful.
-			- **201 Created**: The request has been fulfilled and a new resource has been created.
-			- **202 Accepted**: The request has been accepted for processing.
-			- **204 No Content**: The server has fulfilled the request but there is no content to send.
-		- **3xx (Redirection)**:
-			- **301 Moved Permanently**: The requested resource has been permanently moved to a new location.
-			- **302 Found**: The requested resource has been temporarily moved to a new location.
-			- **304 Not Modified**: The requested resource has not been modified since the last request.
-		- **4xx (Client Error)**:
-			- **400 Bad Request**: The request could not be understood by the server.
-			- **401 Unauthorized**: The request requires user authentication.
-			- **403 Forbidden**: The server has refused to fulfill the request.
-			- **404 Not Found**: The requested resource could not be found.
-		- **5xx (Server Error)**:
-			- **500 Internal Server Error**: The server encountered an unexpected condition.
-			- **501 Not Implemented**: The server does not support the functionality required to fulfill the request.
-			- **502 Bad Gateway**: The server received an invalid response from an upstream server.
-			- **503 Service Unavailable**: The server is temporarily unavailable.
+   
+		![status-codes](https://github.com/user-attachments/assets/e3c779ac-e364-4bd0-90e0-7a9f334c7313)
+
 	- **HTTP/1.1**:
 		- **Persistent Connections**: Allows multiple requests and responses to be sent over a single connection.
 		- **Pipelining**: Allows multiple requests to be sent without waiting for the responses.
@@ -885,39 +834,6 @@ a SYN-ACK packet to the client.
 		- **Security**: Allows the server to enforce security policies.
 
 	- [HTTP Headers - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers)
-
-6. **Web Server Architecture**: The structure of a web server that handles client requests and serves web pages.
-
-	- **Client**:
-		- Sends requests to the server.
-	- **Web Server**:
-		- Listens for incoming connections.
-		- Handles client requests.
-		- Serves web pages.
-	- **Application Server**:
-		- Executes application logic.
-		- Communicates with databases.
-	- **Database Server**:
-		- Stores data.
-		- Communicates with application servers.
-	- **Reverse Proxy**:
-		- Distributes client requests to multiple servers.
-		- Improves performance and reliability.
-	- **Load Balancer**:
-		- Distributes client requests to multiple servers.
-		- Improves performance and reliability.
-	- **Firewall**:
-		- Filters network traffic.
-		- Protects against security threats.
-	- **Content Delivery Network (CDN)**:
-		- Distributes content to multiple servers.
-		- Improves performance and reliability.
-	- **Domain Name System (DNS)**:
-		- Resolves domain names to IP addresses.
-		- Routes client requests to servers.
-	- **Web Browser**:
-		- Requests web pages from servers.
-		- Displays web pages to users.
 
 
 
