@@ -65,6 +65,7 @@ void Parser::parseLocationBlock(ServerConfig& server)
 	{
 		LocationConfig location;
 		location.path = path.getValue();
+        location.auto_index = false;
 		while (pos < tokens.size())
 		{
 			if (tokens[pos].getType() == TOKEN_CLOSE_BRACE)
@@ -151,6 +152,7 @@ void Parser::parseLocationDirective(LocationConfig& location)
     int line_number = token.getLine();
 
 
+
     while (pos < tokens.size() && tokens[pos].getType() != TOKEN_SEMICOLON && tokens[pos].getType() != TOKEN_OPEN_BRACE && tokens[pos].getType() != TOKEN_CLOSE_BRACE)
     {
         Token t = tokens[pos];
@@ -235,13 +237,15 @@ void Parser::parseLocationDirective(LocationConfig& location)
             location.return_url.first = static_cast<e_status>(std::stoi(values[0]));
             break;
         case TOKEN_AUTOINDEX:
-            if (location.auto_index)
-                reportError("Duplicate 'autoindex' directive at line " + std::to_string(line_number));
-			if (values.empty())
-				reportError("Missing value for 'autoindex' at line " + std::to_string(line_number));
+            if (values.empty())
+				reportError("Missing value for 'autoindex' at line " + std::to_string(line_number));            
             if (values.size() != 1)
                 reportError("Unexpected multiple values for 'autoindex' at line " + std::to_string(line_number));
-            location.auto_index = (values[0] == "on");
+            if (values[0] != "on" && values[0] != "off")
+                reportError("Invalid value for 'autoindex' at line " + std::to_string(line_number));
+            if (location.auto_index != false)
+                reportError("Duplicate 'autoindex' directive at line " + std::to_string(line_number));
+            location.auto_index = values[0] == "on";
             break;
 		case TOKEN_ADD_CGI:
             if (location.add_cgi.size() != 0)
