@@ -106,7 +106,7 @@ static	char **prepare_env(std::string s_env, std::string semi_del) {
 	std::vector<std::string>	v_env;
 	size_t			pos;
 	char			**env;
-	
+
 	for (;(pos = s_env.find(semi_del)) != std::string::npos;) {
 		v_env.push_back(s_env.substr(0, pos));
 		s_env = s_env.substr(pos + semi_del.size()); }
@@ -151,7 +151,6 @@ static	void	master_routine(std::string socket_path, std::string executer, std::s
 		}
 		exit(WEXITSTATUS(s));
 	}
-	exit(1);
 }
 
 void	Sockets::_enrg_env_var(std::string name, std::string value) {
@@ -217,7 +216,11 @@ int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string e
 	if (bind(unix_listener, (struct sockaddr*)&address, sizeof(address)) < 0) return -1;
 	if (listen(unix_listener, 5) < 0) return -1;
 	if ((pid = fork()) < 0)	return -1;
-	if (pid == 0)	{this->_main_proc = false; master_routine(this->socket_path, exec, uri, file, env);}
+	if (pid == 0) {
+		this->_main_proc = false;
+		master_routine(this->socket_path, exec, uri, file, env);
+		exit(EXIT_FAILURE);
+	}
 	this->_main_proc = true;
 	if ((unix_sock = ::accept(unix_listener, NULL, NULL)) < 0)  return -1;
 	close(unix_listener);
@@ -445,10 +448,11 @@ void	Sockets::recvFrom(int sock_fd) {
 	}
 	pai->second->first.recvRequest();
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
+		char		buffer[ 1000 ];
+		while (recv(sock_fd, buffer, 1000, MSG_DONTWAIT) > 0);
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();
-		//
 		if (pai->second->first.getStatus() == OK
 			&& !pai->second->first._is_return
 			&& pai->second->first._location_type == CGI) {
@@ -457,7 +461,6 @@ void	Sockets::recvFrom(int sock_fd) {
 			else	pai->second->second._begin_response(*this, serv, 0);
 		}
 		else	pai->second->second._initiate_response(*this, serv);
-		//
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 1);
 	}
 }
