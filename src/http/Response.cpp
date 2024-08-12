@@ -148,6 +148,7 @@ static	int	file_to_disk(std::string content, std::string path, std::string filen
 	return	1;
 }
 
+
 void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
 	if (this->_request->getStatus() == OK && !this->_request->_is_return) {
 		if (this->_request->_location_type == CGI) {/*hold_it*/}

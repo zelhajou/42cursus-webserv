@@ -64,7 +64,7 @@ public:
 	bool						is_file(std::string& path);
 	bool						is_directory(std::string& path, int flag);
 	void						handle_chunked();
-	void						handle_centent_length();
+	void						handle_content_length();
 	void						handle_file();
 	void						handle_directory(LocationConfig* loc);
 	void						handle_uri();
@@ -82,6 +82,7 @@ public:
 	void						setLocation();
 	void						setRequestState(std::string msg, e_status status, e_parser_state state);
 	void						set_servers(std::vector<ServerConfig*>& servers);
+	bool						check_content_length(int ret);
 
 
 public:

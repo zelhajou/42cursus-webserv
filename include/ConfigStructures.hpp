@@ -26,35 +26,32 @@ class	Response;
 // Structure to represent a location block in the configuration
 struct LocationConfig
 {
-	std::string							path;
-	std::vector<std::string>			allowed_methods;
-	std::string							index;
-    std::string							root;
-	std::string							upload_store;
-	std::string							client_body_temp_path;
-	std::pair<e_status, std::string>	return_url;
-
+	std::string								path;
+	std::vector<std::string>				allowed_methods;
+	std::string								index;
+    std::string								root;
+	std::string								upload_store;
+	std::string								client_body_temp_path;
+	std::pair<e_status, std::string>		return_url;
 	std::vector<std::string>				add_cgi;
 	std::string								cgi_path;
 	std::vector<std::string>				cgi_allowed_methods;
-
-	bool								auto_index;
+	bool									auto_index;
 };
 
 // Structure to represent the main server configuration
 struct ServerConfig {
-	std::string									listen_port;
-	std::string								host;
-	std::string								server_name;
+	std::string										listen_port;
+	std::string										host;
+	std::string										server_name;
 	std::map<int, std::string>						error_pages;
-    std::string								client_max_body_size;
-    std::map<std::string, LocationConfig>					locations;
-    int				_socket;
-    bool		is_duplicated;
-    std::map<int, std::pair<Request, Response> *>				_requests;
+    std::string										client_max_body_size;
+    std::map<std::string, LocationConfig>			locations;
+    int												_socket;
+    bool											is_duplicated;
+    std::map<int, std::pair<Request, Response> *>	_requests;
 	bool valid;
-    //
-    void	closeConn(int);	// remove entry from _requests
+    void	closeConn(int);
 	public:
     ServerConfig();
 };

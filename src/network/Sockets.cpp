@@ -45,7 +45,14 @@ Sockets::~Sockets() {
 	for(std::set<ServerConfig*>::iterator i=servers.begin(); i!=servers.end();++i) {
 		if (DEBUG && this->_main_proc)
 			std::cout << KRED << "deleting: " << (*i)->server_name << KNRM << std::endl;
+		for (std::map<int, std::pair<Request, Response>* >::iterator j=(*i)->_requests.begin(); j!=(*i)->_requests.end();++j) {
+			delete j->second;
+		}
 		delete *i;
+	}
+	for (std::map<int, std::pair<int, int>*>::iterator i=this->_cgi_clients.begin(); i!=this->_cgi_clients.end();++i) {
+		close(i->first);
+		delete i->second;
 	}
 }
 
@@ -67,6 +74,9 @@ static	std::string	exec_job(pid_t *grandchild, char *executer, char *script, cha
 		}
 		dup2(pi[1], 1); close(pi[1]);
 		execve(argv[0], argv, env);
+		for (int i=0; env[i]; i++)
+			{ delete env[i]; }
+		delete	[] env;
 		std::cout << KRED << "execve: " << strerror(errno) << KNRM << "\n";
 		exit(EXIT_FAILURE);
 	}
@@ -221,6 +231,7 @@ int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string e
 		master_routine(this->socket_path, exec, uri, file, env);
 		exit(EXIT_FAILURE);
 	}
+	if (pid == 0)	{delete pr_info; this->_main_proc = false; master_routine(this->socket_path, exec, uri, file, env);}
 	this->_main_proc = true;
 	if ((unix_sock = ::accept(unix_listener, NULL, NULL)) < 0)  return -1;
 	close(unix_listener);
@@ -448,8 +459,8 @@ void	Sockets::recvFrom(int sock_fd) {
 	}
 	pai->second->first.recvRequest();
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
-		char		buffer[ 1000 ];
-		while (recv(sock_fd, buffer, 1000, MSG_DONTWAIT) > 0);
+		char buffer[BUFFER_SIZE];
+		while (recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT) >= 0);
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();

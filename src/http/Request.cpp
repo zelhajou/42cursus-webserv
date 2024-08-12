@@ -89,9 +89,7 @@ bool	Request::is_cgi(LocationConfig *loc) {
 }
 
 void	Request::handle_location() {
-	if (this->_c_location == NULL)
-		{setRequestState(LOC_NF, NOT_FOUND, ERROR); return ;}
-	if (is_cgi(this->_c_location))	this->_location_type = CGI; return ;
+	if (is_cgi(this->_c_location))	{this->_location_type = CGI; return ;}
 	if (this->_c_location->return_url.first != STATUS_NONE)
 		{setRequestState(this->_c_location->return_url.second, this->_c_location->return_url.first, DONE); this->_is_return = true;}
 	if (std::find(this->_c_location->allowed_methods.begin(), this->_c_location->allowed_methods.end(), this->_request.first_line.method) == this->_c_location->allowed_methods.end())
@@ -226,6 +224,12 @@ void	Request::parse_uri() {
 		{setRequestState(INV_URI, BAD_REQUEST, ERROR); return ;}
 	extract_query_string();
 	this->_c_location = ::search(this->_location_tree, this->_request.first_line.uri, ::cmp);
+	if (this->_c_location == NULL) {
+		setRequestState(LOC_NF, NOT_FOUND, ERROR);
+		this->_status = NOT_FOUND;
+		this->_state = ERROR;
+		return ;
+	}
 	handle_location();
 	handle_uri();
 }
@@ -307,7 +311,7 @@ void	Request::set_body() {
 		this->_status = REQUEST_ENTITY_TOO_LARGE;
 	}
 	else if (this->_request.headers.content_length > 0)
-		handle_centent_length();
+		handle_content_length();
 	else {
 		setRequestState(LEN_REQ, LENGTH_REQUIRED, ERROR);
 		this->_state = ERROR;
@@ -380,19 +384,20 @@ static bool is_hex(std::string str) {
 	return true;
 }
 
-void Request::handle_centent_length() {
-
+void Request::handle_content_length() {
 	this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
 	this->_total_body_size += this->_recv_bytes;
 	this->_request_buffer.clear();
 	if (this->_total_body_size == this->_request.headers.content_length) {
 		this->_request.raw_body = this->_request.raw_body.substr(0, this->_request.headers.content_length);
 		parse_body();
+		return ;
 	}
-	else if (this->_total_body_size > this->_request.headers.content_length) {
-		setRequestState(BD_TOO_BIG, REQUEST_ENTITY_TOO_LARGE, ERROR);
+	if (this->_total_body_size > this->_request.headers.content_length) {
+		setRequestState(BD_TOO_BIG, BAD_REQUEST, ERROR);
 		this->_state = ERROR;
-		this->_status = REQUEST_ENTITY_TOO_LARGE;
+		this->_status = BAD_REQUEST;
+		return ;
 	}
 }
 
@@ -446,6 +451,18 @@ void Request::parse_body() {
 	this->_state = DONE;
 }
 
+bool	Request::check_content_length(int ret) {
+	if (ret < BUFFER_SIZE && this->_request.headers.content_length > 0) {
+		if (this->_total_body_size + static_cast<size_t>(ret) < this->_request.headers.content_length) {
+			setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
+			this->_state = ERROR;
+			this->_status = BAD_REQUEST;
+			return false;
+		}
+	}
+	return true;
+}
+
 void	Request::recvRequest() {
 	char		buffer[BUFFER_SIZE];
 	int			ret;
@@ -461,6 +478,8 @@ void	Request::recvRequest() {
 	this->_request_buffer.append(buffer, ret);
 	set_first_line();
 	set_headers();
+	if (check_content_length(ret) == false)
+		return ;
 	set_body();
 }
 

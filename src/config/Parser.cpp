@@ -3,7 +3,7 @@
 #include <sstream>
 #include <iostream>
 
-Parser::Parser(const std::vector<Token>& tokens) : tokens(tokens), pos(0) {}
+Parser::Parser(const std::vector<Token>& tokens) :  tokens(tokens), pos(0) {}
 
 MainConfig Parser::parse()
 {
