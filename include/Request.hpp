@@ -103,7 +103,7 @@ public:
 	e_method								_method;
 	LocationConfig							*_c_location;
 	std::pair<std::string, std::string>		_cgi_info;
-	bool									_is_return;
+	bool						_is_return;
 	size_t									_recv_bytes;
 	std::vector<ServerConfig*>				_servers;
 };

@@ -43,6 +43,7 @@ enum e_status {
 	INTERNAL_SERVER_ERROR = 500,			// The server encountered an unexpected condition which prevented it from fulfilling the request.
 	NOT_IMPLEMENTED = 501,					// The server does not support the functionality required to fulfill the request.
 	REDIRECT = 301,							// The requested resource has been assigned a new permanent URI and any future references to this resource SHOULD use one of the returned URIs.
+	TEMP_REDIRECT = 307,							// The requested resource has been assigned a new temp URI.
 	NOT_MODIFIED = 304,						// If the client has performed a conditional GET request and access is allowed, but the document has not been modified, the server SHOULD respond with this status code.
 	TOO_MANY_REQUESTS = 429,				// The user has sent too many requests in a given amount of time.
 	REQUEST_ENTITY_TOO_LARGE = 413,			// The server is refusing to process a request because the request entity is larger than the server is willing or able to process.
@@ -57,6 +58,7 @@ enum e_status {
 };
 
 enum e_parser_state {
+	UPLOADING,
 	FIRST_LINE,
 	HEADERS,
 	BODY,

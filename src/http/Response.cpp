@@ -4,6 +4,8 @@
 Response::Response():_new_session(false),  _file_type("NONE"), _has_cookies(false), status(FIRST_LINE), _has_body(true) {
 	this->_sent.push_back(0);
 	this->_sent.push_back(0);
+	this->_recv.push_back(0); this->_recv.push_back(0);
+	this->_recv.push_back(0); this->_recv.push_back(0);
 }
 
 Response::Response(const Response &R) { *this = R; }
@@ -18,8 +20,10 @@ size_t	Response::get_file_size() {
 	return (size);
 }
 
-static	std::string	http_code_msg(e_status code)
+std::string	Response::http_code_msg(e_status code)
 {
+	if (this->_request->_is_return)		
+		return this->_request->_c_location->return_url.second;
 	switch (code) {
 		case OK:				return "OK";
 		case BAD_REQUEST:			return "Bad Request";
@@ -38,7 +42,7 @@ static	std::string	http_code_msg(e_status code)
 		case REQUEST_TIMEOUT:		return "Request Timeout";
 		case NOT_ACCEPTABLE:		return "Not Acceptable";
 		case METHOD_NOT_ALLOWED:		return "Method Not Allowed";
-		default:				return " ";
+		default:				return "";
 	}
 }
 
@@ -47,8 +51,8 @@ static	std::string	http_code_msg(e_status code)
 std::string	Response::generate_status_file(e_status status_code, ServerConfig *server, std::string addon) {
 	std::map<int, std::string>::iterator	it = server->error_pages.find(status_code);
 	if (it != server->error_pages.end() && access(it->second.c_str(), R_OK) == 0) return it->second;
-	if (!addon.size())	addon = http_code_msg(status_code);
-	std::string	status_file = CONFIG_PATH"/html_default_error_files/" + std::to_string(status_code) + clean_up_stuff(addon, "[\\]^`:;<>=?/ ", "_____________") + ".html";
+	if (!addon.size())	addon = this->http_code_msg(status_code);
+	std::string	status_file = conc_urls(CONFIG_PATH, "html_default_error_files/") + std::to_string(status_code) + clean_up_stuff(addon, "[\\]^`:;<>=?/ ", "_____________") + ".html";
 	if (!access(status_file.c_str(), R_OK))	return status_file;
 	std::fstream	_file(status_file, std::ios::out);
 	if (!_file.is_open())	return "";
@@ -83,6 +87,7 @@ e_status	print_Cstatus(e_status st) {
 	int	status = (int)st;
 	std::cout << KBGR;
 	if (status == 200)		std::cout << KGRN;
+	else if (status >= 600)	std::cout << KWHT;
 	else if (status >= 500)	std::cout << KYEL;
 	else if (status >= 400)	std::cout << KRED;
 	else if (status >= 300)	std::cout << KCYN;
@@ -92,7 +97,7 @@ e_status	print_Cstatus(e_status st) {
 
 static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 	(void)server;
-	std::string target =  CONFIG_PATH"/html_generated_files/"+ replace_characters(uri, "/", "#")+"S-"+std::to_string(get_dir_size(uri))+"Bytes"+".html";
+	std::string target =  conc_urls(CONFIG_PATH, "html_generated_files/") + replace_characters(uri, "/", "#")+"S-"+std::to_string(get_dir_size(uri))+"Bytes"+".html";
 	struct	stat	demo;
 	if (stat(target.c_str(), &demo) != -1)	return target;
 	std::fstream	output(target, std::ios::out);
@@ -111,18 +116,16 @@ static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 		if (!window.location.href.endsWith(\"/\")) loc = \"/\" + loc; window.location.href += loc;}</script>\
 		</head><body><div id=\"container\">\
 		<h1>" << uri << " :</h1><div>";
-	////////////////
 	DIR			*dir = opendir(uri.c_str());
 	struct	dirent		*direct;
 	struct	stat		file_status;
 	std::string		new_uri;
 	while ((direct = readdir(dir))) {
-		new_uri = uri + "/";
-		new_uri.append(direct->d_name);
+		new_uri = conc_urls(uri, direct->d_name);
 		output << "<a href=\"";
-		if (!std::strcmp(direct->d_name, ".") || !std::strcmp(direct->d_name, ".."))
+		/*if (!std::strcmp(direct->d_name, ".") || !std::strcmp(direct->d_name, ".."))
 			output << direct->d_name<< "\">" << direct->d_name;
-		else	output << "javascript:;\" onclick=\"c_redir('" << direct->d_name << "')\">" << direct->d_name;
+		else	*/output << "javascript:;\" onclick=\"c_redir('" << direct->d_name << "')\">" << direct->d_name;
 		std::memset(&file_status, 0, sizeof(file_status));
 		if (stat(new_uri.c_str(), &file_status) == -1) {
 			output << "<p style=\"color:red;\">size_retrieval_failed</p></a><hr/>";
@@ -130,7 +133,6 @@ static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 		}
 		output <<"<p>"<< std::to_string(file_status.st_size)<<" B</p></a><hr/>";
 	}
-	///////////////
 	output <<	"</div></div></body></html>\n";
 	output.close();
 	closedir(dir);
@@ -139,17 +141,50 @@ static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 
 e_parser_state	Response::get_status() { return this->status; }
 
-static	int	file_to_disk(std::string content, std::string path, std::string filename) {
-	if (!filename.size())	filename = _generate_random_string(path, 15);
-	std::fstream		file(path+"/"+filename, std::ios::out);
-	if (!file.is_open())	return 0;
-	file << content;
-	file.close();
-	return	1;
+void	Response::file_to_disk(int upload_buffer_size) {
+	try {
+		if (this->_raw_upload) {
+			if (!this->_recv[1]) {
+				this->_recv[0] = 0;
+				this->_recv[1] = this->_request->_request.raw_body.size();
+				this->_upload_target = conc_urls(this->_upload_path, _generate_random_string(this->_upload_path, 15));
+				this->_upload_stream.open(this->_upload_target, std::ios::out);
+				if (!this->_upload_stream) throw std::runtime_error("cant open upload stream");
+			}
+			if (this->_recv[0] + upload_buffer_size > this->_recv[1]) upload_buffer_size = this->_recv[1] - this->_recv[0];
+			this->_upload_stream << this->_request->_request.raw_body.substr(this->_recv[0], upload_buffer_size);
+			this->_recv[0] += upload_buffer_size;
+		} else {
+			if (!this->_recv[3]) {
+				this->_recv[1] = 0; this->_recv[2] = 0;
+				this->_recv[3] = this->_request->_post_body.size();
+			}
+			if (!this->_recv[1]) {
+				this->_recv[0] = 0;
+				this->_form_field = &this->_request->_post_body[ this->_recv[2] ];
+				this->_recv[1] = this->_form_field->data.size();
+				if (this->_recv[1] == 0) { this->_recv[2] += 1; return ; }
+				if (!this->_form_field->filename.size()) this->_form_field->filename = _generate_random_string(this->_upload_path, 15);
+				this->_upload_target = conc_urls(this->_upload_path, this->_form_field->filename);
+				if (this->_upload_stream.is_open()) this->_upload_stream.close();
+				this->_upload_stream.open(this->_upload_target, std::ios::out);
+				if (!this->_upload_stream) throw std::runtime_error("cant open upload stream");
+			}
+			if (this->_recv[0] + upload_buffer_size > this->_recv[1]) upload_buffer_size = this->_recv[1] - this->_recv[0];
+			this->_upload_stream << this->_form_field->data.substr(this->_recv[0], upload_buffer_size);
+			this->_recv[0] += upload_buffer_size;
+			if (this->_recv[0] >= this->_recv[1]) {
+				this->_recv[0] = 0; this->_recv[1] = 0; this->_recv[2] += 1;
+			}
+		}
+	} catch (std::exception &l) {(void)l;
+		this->_post_status = false;
+		this->_recv[0] = this->_recv[1];
+		return ;
+	}
 }
 
-
-void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
+void	Response::_initiate_response(int client, Sockets &sock, ServerConfig *server) {
 	if (this->_request->getStatus() == OK && !this->_request->_is_return) {
 		if (this->_request->_location_type == CGI) {/*hold_it*/}
 		else if (this->_request->_location_type == AUTOINDEX) {
@@ -164,21 +199,24 @@ void	Response::_initiate_response(Sockets &sock, ServerConfig *server) {
 		}
 		else if (this->_request->get_first_line().method == "GET") this->target_file = this->_request->get_first_line().uri;
 		else if (this->_request->get_first_line().method == "POST") {
-			bool	post_status(true);	int	mini_post_status(1);
-			if (this->_request->get_headers().content_type.find("multipart/form-data") != std::string::npos) {
-				for (std::vector<t_post_body>::iterator i = this->_request->_post_body.begin(); i!=this->_request->_post_body.end(); ++i)
-					if (i->filename.size() > 0) mini_post_status += file_to_disk(i->data, this->_request->get_first_line().uri, i->filename);
-			}
-			else	post_status = file_to_disk(this->_request->_request.raw_body, this->_request->get_first_line().uri, "");
-			target_file = this->generate_status_file(post_status ? this->_request->getStatus() : INTERNAL_SERVER_ERROR, server, "");
+			this->status = UPLOADING;
+			this->_post_status = true;
+			this->_recv[0] = 0; this->_recv[1] = 0;
+			this->_recv[2] = 0; this->_recv[3] = 0;
+			this->_upload_path = this->_request->get_first_line().uri;
+			fcntl(client, F_SETFL, O_NONBLOCK);
+			if (this->_request->get_headers().content_type.find("multipart/form-data") != std::string::npos)
+				this->_raw_upload = false;
+			else	this->_raw_upload = true;
+			this->file_to_disk(UPLOAD_BUFFER_SIZE);
+			return ;
 		}
 		else if (this->_request->get_first_line().method == "DELETE")
 			this->target_file = this->generate_status_file((std::remove(this->_request->get_first_line().uri.c_str()))
-					? INTERNAL_SERVER_ERROR
-					: this->_request->getStatus(), server, "");
+				? INTERNAL_SERVER_ERROR
+				: this->_request->getStatus(), server, "");
 	}
 	else	this->target_file = this->generate_status_file(this->_request->getStatus(), server, "");
-	////
 	this->_begin_response(sock, server, 0);
 }
 
@@ -190,7 +228,7 @@ void	Response::_begin_response(Sockets &sock, ServerConfig *server, int st) {
 			e_status	tempS = this->_request->getStatus();
 			this->_request->setStatus(FORBIDDEN);
 			if (tempS == OK) {
-				this->_initiate_response(sock, server);
+				this->_initiate_response(0, sock, server);
 				return ;
 			}
 			else	this->_has_body = false;
@@ -209,33 +247,45 @@ void	Response::_begin_response(Sockets &sock, ServerConfig *server, int st) {
 size_t	Response::form_headers(ServerConfig *server) {
 	e_status	req_scode = this->_response_status;
 	if (this->header.size())	this->header.clear();
-	this->header = "HTTP/1.1 " + std::to_string(req_scode) + " " + http_code_msg(req_scode) + CRLF;
+	this->header = "HTTP/1.1 " + std::to_string(req_scode) + " " + this->http_code_msg(req_scode) + CRLF;
 	this->header.append("Server: " + server->server_name + CRLF"Connection: " + this->_connection_type + CRLF);
-	if (this->_request->_is_return && req_scode >= 300 && req_scode < 400) {
-		this->header.append("Location: "+this->_request->_c_location->return_url.second+CRLF); }
-
+	if (this->_request->_is_return && req_scode >= 300 && req_scode < 400)
+		this->header.append("Location: " + this->_request->_c_location->return_url.second + CRLF);
+	else if (this->_has_redir)	this->header.append("Location: " + this->_cgi_redir + CRLF);
 	if (this->_has_cookies)	this->header.append("set-cookie: " + this->_cgi_cookie + " ;" + (this->_new_session ? "" : CRLF));
 	if (this->_new_session)	this->header.append((this->_has_cookies ? std::string("") : std::string("set-cookie: ")) + "session="+ this->_session_id + "; " + CRLF);
-	//
 	if (this->_has_body) {
 		this->header.append("Content-type: " + this->_file_type + CRLF);
 		this->header.append("Content-Length: " + std::to_string(this->_file_size) + CRLF);
 	}
-	//
 	this->header.append(CRLF);
 	return this->header.size();
 }
 
-void	Response::sendResponse(int sock_fd, ServerConfig *server) {
+void	Response::sendResponse(int sock_fd, Sockets &sock, ServerConfig *server) {
 	int		sent_res;
-	if (this->status == FIRST_LINE)
-	{
+
+	if (this->status == UPLOADING) {
+		this->file_to_disk(UPLOAD_BUFFER_SIZE);
+		if ((this->_raw_upload && this->_recv[0] >= this->_recv[1])
+			|| (!this->_raw_upload && this->_recv[2] >= this->_recv[3])) {
+			if (this->_upload_stream.is_open()) this->_upload_stream.close();
+			this->target_file = this->_post_status ?
+				this->generate_status_file(this->_request->getStatus(), server, "") :
+				this->generate_status_file(INTERNAL_SERVER_ERROR, server, "UPLOAD FAILURE");
+			this->_begin_response(sock, server, 0);
+			this->status = FIRST_LINE;
+		}
+		else if (DEBUG) std::cout << "\t  [" << server->server_name << " upload: " << this->_recv[0] << " of " << this->_recv[1]
+				<< ", file " << (this->_raw_upload ? "" : (std::to_string(this->_recv[2]+1) + " of " + std::to_string(this->_recv[3]))) << "]" << std::endl;
+		return ;
+	}
+	if (this->status == FIRST_LINE) {
 		this->_sent[1] = this->form_headers(server);
 		this->status = HEADERS;
 		return ;
 	}
-	if (this->status == HEADERS)
-	{
+	if (this->status == HEADERS) {
 		sent_res = send(sock_fd, this->header.c_str(), this->header.size(), 0);
 		if (sent_res < 0)	this->_sent[0] = this->_sent[1];
 		else		this->_sent[0] += sent_res;
@@ -249,8 +299,7 @@ void	Response::sendResponse(int sock_fd, ServerConfig *server) {
 		}
 		else	this->header = this->header.substr(sent_res);
 	}
-	else if (this->status == BODY)
-	{
+	else if (this->status == BODY) {
 		char	buffer[FILE_READ_BUFFER_SIZE];
 
 		std::memset(buffer, 0, sizeof(buffer));
@@ -277,10 +326,10 @@ void	Response::sendResponse(int sock_fd, ServerConfig *server) {
 		if (DEBUG) {
 			size_t	m_size = this->_request->get_first_line().method.size();
 			size_t	u_size = this->_request->get_first_line().uri.size();
-			std::cout << "[ " << this->_request->get_first_line().method << std::setw(8-m_size) << " ]" << KNRM
+			std::cout << "[ " << this->_request->get_first_line().method << std::setw(7-m_size) << " ]" << KNRM
 			<< " " << KUND << this->_request->get_first_line().uri << " " << std::setw(80-u_size) << KNRM
-			<< http_code_msg(print_Cstatus(this->_response_status)) << " " << KNRM << " : "
-			<< KUND << this->_sent[1] << " B" << KNRM << std::endl;
+			<< this->http_code_msg(print_Cstatus(this->_response_status)) << " " << KNRM << " : "
+			<< KUND << "\x1b[3m" << this->_sent[1] << " B" << KNRM << std::endl;
 		}
 	}
 }

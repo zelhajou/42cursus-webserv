@@ -23,6 +23,7 @@
 # include <signal.h> 
 
 # define FILE_READ_BUFFER_SIZE	1000
+# define UPLOAD_BUFFER_SIZE		3000000
 # define CRLF			"\r\n"
 # define CLR_TERM			"\e[1;1H\e[2J"
 # ifndef PROJECT_PATH
@@ -104,9 +105,7 @@ private:
 	KQueue						_kqueue;
 	std::map<int, ServerConfig *>				_fd_to_server;
 	std::map<std::string, ServerConfig *>			_dup_servers;
-	//< unix_process, < worker_pid, client > >
-	std::map<int, std::pair<int, int>*>			_cgi_clients;
-	//
+	std::map<int, std::pair<int, int>*>			_cgi_clients; // < unix_process, < worker_pid, client > >
 	pid_t						master_PID;
 	int						master_process;
 	int						cgi_controller;
@@ -118,6 +117,7 @@ private:
 void		fix_up_signals(void (*)(int));
 std::string	clean_up_stuff(std::string, std::string, std::string);
 std::string	_generate_random_string(std::string, int);
+std::string	conc_urls(std::string, std::string);
 
 # include "Response.hpp"
 # include "Request.hpp"
