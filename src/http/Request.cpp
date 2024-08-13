@@ -504,10 +504,14 @@ void	Request::make_new_section() {
 	if (is_file) {
 		filename = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + filename;
 		this->_file.open(filename.c_str(), std::ios::out | std::ios::binary);
-		if (!this->_file.is_open())
-			{setRequestState(CANT_O_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+		if (!this->_file.is_open()) {
+			setRequestState(CANT_O_FILE, INTERNAL_SERVER_ERROR, ERROR);
+			this->_state = ERROR;
+			this->_status = INTERNAL_SERVER_ERROR;
+			return ;
+		}
 	}
-	t_post_raw post_raw = {filename, is_file, false, BOUNDRY, 0};
+	t_post_raw post_raw = {filename, is_file, false, BOUNDRY, 0, ""};
 	this->_post_raw.push_back(post_raw);
 }
 
@@ -576,7 +580,7 @@ void	Request::write_content(t_post_raw& post_raw) {
 	if ((pos = this->_request.raw_body.find(boundry)) != std::string::npos) {
 		this->_file.write(this->_request.raw_body.c_str(), pos - 2);
 		if (this->_file.bad())
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
 		this->_file.close();
 		post_raw.sec_size += (pos - 2);
 		this->_request.raw_body = this->_request.raw_body.substr(pos);
@@ -588,7 +592,7 @@ void	Request::write_content(t_post_raw& post_raw) {
 		std::streampos	pos = this->_file.tellp();
 		this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
 		if (this->_file.bad())
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
 		std::streamsize bw = this->_file.tellp() - pos;
 		post_raw.sec_size += bw;
 		this->_request.raw_body = this->_request.raw_body.substr(bw);
@@ -625,6 +629,8 @@ void	Request::handle_multipart() {
 				return ;
 			make_new_section();
 		}
+		if (this->_request.state == ERROR)
+			return ;
 		t_post_raw& post_raw = this->_post_raw.back();
 		if (post_raw.section == BOUNDRY)
 			skip_boundary(post_raw);
@@ -652,14 +658,14 @@ void	Request::handle_raw_post() {
 		file_name = get_random_file_name();
 		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
 		if (!this->_file.is_open())
-			{setRequestState(CANT_O_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
-		t_post_raw post_raw = {file_name, true, false, BOUNDRY, 0};
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+		t_post_raw post_raw = {file_name, true, false, BOUNDRY, 0, ""};
 		this->_post_raw.push_back(post_raw);
 	}
 	std::streampos	pos = this->_file.tellp();
 	this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
 	if (this->_file.bad())
-		{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+		{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
 	std::streamsize bytes_written = this->_file.tellp() - pos;
 	this->_request.raw_body.substr(0, bytes_written);
 	t_post_raw& post_raw = this->_post_raw.back();
@@ -667,6 +673,8 @@ void	Request::handle_raw_post() {
 }
 
 void Request::write_to_file() {
+	if (this->_location_type == CGI)
+		return ;
 	if (this->_request.boundary.size() > 0)
 		handle_multipart();
 	else
@@ -703,7 +711,7 @@ void Request::handle_chunked() {
 			if (this->_chunk_size == 0) {parse_body(); return ;}
 		}
 		else
-			{setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR); return ;}
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
 	}
 	if (this->_total_body_size > this->_max_body_size) {
 		setRequestState(BD_TOO_BIG, REQUEST_ENTITY_TOO_LARGE, ERROR);
@@ -715,8 +723,8 @@ void Request::handle_chunked() {
 
 void Request::parse_body() {
 
-	// if (this->_request.body.size() == 0)
-	// 	this->_request.body = this->_request.raw_body;
+	if (this->_request.body.size() == 0)
+		this->_request.body = this->_request.raw_body;
 	// if (this->_total_body_size == 0)
 	// 	{this->_state = DONE; return ;}
 	// if (this->_request.boundary.size() > 0)

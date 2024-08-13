@@ -197,7 +197,7 @@ void	Response::_initiate_response(int client, Sockets &sock, ServerConfig *serve
 		}
 		else if (this->_request->get_first_line().method == "GET") this->target_file = this->_request->get_first_line().uri;
 		else if (this->_request->get_first_line().method == "POST") {
-			this->status = DONE;
+			// this->status = DONE;
 			// this->_post_status = true;
 			// this->_recv[0] = 0; this->_recv[1] = 0;
 			// this->_recv[2] = 0; this->_recv[3] = 0;
@@ -207,7 +207,7 @@ void	Response::_initiate_response(int client, Sockets &sock, ServerConfig *serve
 			// 	this->_raw_upload = false;
 			// else	this->_raw_upload = true;
 			// this->file_to_disk(UPLOAD_BUFFER_SIZE);
-			return ;
+			target_file = this->generate_status_file(this->_request->getStatus() , server, "");
 		}
 		else if (this->_request->get_first_line().method == "DELETE")
 			this->target_file = this->generate_status_file((std::remove(this->_request->get_first_line().uri.c_str()))
