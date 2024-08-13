@@ -140,6 +140,8 @@ void	Request::handle_file() {
 }
 
 void	Request::handle_directory(LocationConfig* loc) {
+	std::string uri = this->_request.first_line.uri;
+
 	if (access(this->_request.first_line.uri.c_str(), R_OK) == -1) {
 		setRequestState(INV_LOC_DIR, FORBIDDEN, ERROR);
 		this->_status = FORBIDDEN;
@@ -147,14 +149,20 @@ void	Request::handle_directory(LocationConfig* loc) {
 		return ;
 	}
 	if (loc->index.size() > 0) {
-		this->_request.first_line.uri += "/" + loc->index;
-		if (!is_file(this->_request.first_line.uri)) {
-			setRequestState(INV_LOC_FILE, FORBIDDEN, ERROR);
-			this->_status = FORBIDDEN;
+		uri += "/" + loc->index;
+		if (is_file(uri)) {
+			this->_request.first_line.uri = uri;
+			this->_location_type = STATIC;
+		}
+		else if (loc->auto_index)
+			this->_location_type = AUTOINDEX;
+		else {
+			this->_request.first_line.uri = uri;
+			setRequestState(INV_LOC_FILE, NOT_FOUND, ERROR);
+			this->_status = NOT_FOUND;
 			this->_state = ERROR;
 			return ;
 		}
-		this->_location_type = STATIC;
 	}
 	else if (!loc->auto_index) {
 		setRequestState(INV_LOC_DIR, FORBIDDEN, ERROR);
@@ -295,8 +303,6 @@ void	Request::set_body() {
 	int		ret;
 
 	if (this->_state != BODY || this->_request.state == ERROR || this->_request.status != STATUS_NONE) {
-		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
-			;
 		this->_status = this->_request.status;
 		this->_state = this->_request.state;
 		return ;
@@ -385,10 +391,22 @@ static bool is_hex(std::string str) {
 }
 
 void Request::handle_content_length() {
+	char	buffer[BUFFER_SIZE];
+	int		ret;
+
 	this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
 	this->_total_body_size += this->_recv_bytes;
+	std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
+	std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;
 	this->_request_buffer.clear();
 	if (this->_total_body_size == this->_request.headers.content_length) {
+		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_PEEK | MSG_DONTWAIT)) != -1) {
+			if (ret == 0) break ;
+			setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
+			this->_state = ERROR;
+			this->_status = BAD_REQUEST;
+			return ;
+		}
 		this->_request.raw_body = this->_request.raw_body.substr(0, this->_request.headers.content_length);
 		parse_body();
 		return ;
@@ -452,13 +470,22 @@ void Request::parse_body() {
 }
 
 bool	Request::check_content_length(int ret) {
+	char	buffer[10];
+	int		b;
+
 	if (ret < BUFFER_SIZE && this->_request.headers.content_length > 0) {
-		if (this->_total_body_size + static_cast<size_t>(ret) < this->_request.headers.content_length) {
-			setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
-			this->_state = ERROR;
-			this->_status = BAD_REQUEST;
-			return false;
+		while ((b = recv(this->_fd, buffer, 10, MSG_PEEK | MSG_DONTWAIT)) != -1) {
+			if (b == 0 && this->_total_body_size + static_cast<size_t>(ret) < this->_request.headers.content_length) {
+				// std::cout << "Ret : " << KRED << ret << KNRM << std::endl;
+				// std::cout << "Content-Length " << KRED << this->_request.headers.content_length << KNRM << " does not match body size " << KRED << this->_total_body_size + static_cast<size_t>(ret) << KNRM << std::endl;
+				setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
+				this->_state = ERROR;
+				this->_status = BAD_REQUEST;
+				return false;
+			}
+			break ;
 		}
+		std::cout << "length b : " << KRED << b << KNRM << std::endl;
 	}
 	return true;
 }
@@ -470,6 +497,7 @@ void	Request::recvRequest() {
 	if (this->_state == DONE || this->_state == ERROR) return ;
 	ret = recv(this->_fd, buffer, BUFFER_SIZE, 0);
 	this->_recv_bytes = ret;
+	std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
 	if (ret == -1 || ret == 0) {
 		this->_status = INTERNAL_SERVER_ERROR;
 		this->_state = ERROR;

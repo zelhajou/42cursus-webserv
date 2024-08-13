@@ -464,8 +464,14 @@ void	Sockets::recvFrom(int sock_fd) {
 	}
 	pai->second->first.recvRequest();
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
-		char buffer[ 1000 ];
-		while (recv(sock_fd, buffer, 999, MSG_DONTWAIT) > 0);
+		char buffer[BUFFER_SIZE];
+		int	b;
+		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1) {
+			std::cout << KRED << "b: " << b << KNRM << std::endl;
+		}
+		if (pai->second->first.getState() == ERROR) {
+			std::cout << KRED << "Error: " << pai->second->first._request.error_message << KNRM << std::endl;
+		}
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();

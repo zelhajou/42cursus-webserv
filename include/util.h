@@ -4,7 +4,7 @@
 # include <string>
 # include <map>
 
-# define BUFFER_SIZE 4096
+# define BUFFER_SIZE 40000
 
 typedef std::vector<std::pair<std::string, std::string> > t_vpair;
 
