@@ -197,16 +197,16 @@ void	Response::_initiate_response(int client, Sockets &sock, ServerConfig *serve
 		}
 		else if (this->_request->get_first_line().method == "GET") this->target_file = this->_request->get_first_line().uri;
 		else if (this->_request->get_first_line().method == "POST") {
-			this->status = UPLOADING;
-			this->_post_status = true;
-			this->_recv[0] = 0; this->_recv[1] = 0;
-			this->_recv[2] = 0; this->_recv[3] = 0;
-			this->_upload_path = this->_request->get_first_line().uri;
-			fcntl(client, F_SETFL, O_NONBLOCK);
-			if (this->_request->get_headers().content_type.find("multipart/form-data") != std::string::npos)
-				this->_raw_upload = false;
-			else	this->_raw_upload = true;
-			this->file_to_disk(UPLOAD_BUFFER_SIZE);
+			this->status = DONE;
+			// this->_post_status = true;
+			// this->_recv[0] = 0; this->_recv[1] = 0;
+			// this->_recv[2] = 0; this->_recv[3] = 0;
+			// this->_upload_path = this->_request->get_first_line().uri;
+			// fcntl(client, F_SETFL, O_NONBLOCK);
+			// if (this->_request->get_headers().content_type.find("multipart/form-data") != std::string::npos)
+			// 	this->_raw_upload = false;
+			// else	this->_raw_upload = true;
+			// this->file_to_disk(UPLOAD_BUFFER_SIZE);
 			return ;
 		}
 		else if (this->_request->get_first_line().method == "DELETE")

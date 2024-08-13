@@ -32,6 +32,8 @@
 # define INV_LOC_DIR	"Invalid location directory"
 # define CANT_DELL		"Can't delete file/directory"
 # define BD_TOO_BIG		"Body too large"
+# define CANT_O_FILE	"Can't open file"
+# define CANT_W_FILE	"Can't write to file"
 
 # define GREEN "\033[1,32m"
 # define RED "\033[1,31m"
@@ -83,7 +85,17 @@ public:
 	void						setRequestState(std::string msg, e_status status, e_parser_state state);
 	void						set_servers(std::vector<ServerConfig*>& servers);
 	bool						check_content_length(int ret);
-
+	void						write_to_file();
+	void						handle_raw_post();
+	void						handle_multipart();
+	void						make_new_section();
+	bool						is_last_boundary();
+	void						write_content(t_post_raw&);
+	void						store_content(t_post_raw&);
+	void						skip_boundary(t_post_raw&);
+	void						skip_content_dis(t_post_raw&);
+	void						skip_content_typ(t_post_raw&);
+	void						skip_crlf(t_post_raw&);
 
 public:
 	int										_fd;
@@ -103,9 +115,11 @@ public:
 	e_method								_method;
 	LocationConfig							*_c_location;
 	std::pair<std::string, std::string>		_cgi_info;
-	bool						_is_return;
+	bool									_is_return;
 	size_t									_recv_bytes;
 	std::vector<ServerConfig*>				_servers;
+	std::vector<t_post_raw>					_post_raw;
+	std::ofstream							_file;
 };
 
 #endif

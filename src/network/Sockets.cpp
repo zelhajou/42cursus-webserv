@@ -466,7 +466,7 @@ void	Sockets::recvFrom(int sock_fd) {
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
 		char buffer[BUFFER_SIZE];
 		int	b;
-		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1); 
+		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1) ;
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();
@@ -624,12 +624,12 @@ static int createSocket(struct addrinfo *res, mit it) {
 }
 
 void	Sockets::startServers() {
-	struct addrinfo		hints;
-	struct addrinfo		*res;
-	int					sock;
-	int					nbr = 0;
-	bool					this_status(true);
-	std::vector<ServerConfig* >			servers = this->_main_config.servers;
+	struct addrinfo					hints;
+	struct addrinfo					*res;
+	int								sock;
+	int								nbr = 0;
+	bool							this_status = true;
+	std::vector<ServerConfig* >		servers = this->_main_config.servers;
 
 	for (mit it = servers.begin(); it != servers.end(); it++) {
 		initAddInfo(hints);

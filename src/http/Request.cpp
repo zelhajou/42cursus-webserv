@@ -315,6 +315,7 @@ void	Request::set_body() {
 		setRequestState(BD_TOO_BIG, REQUEST_ENTITY_TOO_LARGE, ERROR);
 		this->_state = ERROR;
 		this->_status = REQUEST_ENTITY_TOO_LARGE;
+		return ;
 	}
 	else if (this->_request.headers.content_length > 0)
 		handle_content_length();
@@ -322,7 +323,9 @@ void	Request::set_body() {
 		setRequestState(LEN_REQ, LENGTH_REQUIRED, ERROR);
 		this->_state = ERROR;
 		this->_status = LENGTH_REQUIRED;
+		return ;
 	}
+	write_to_file();
 }
 
 void Request::parse_first_line() {
@@ -398,6 +401,8 @@ void Request::handle_content_length() {
 	this->_total_body_size += this->_recv_bytes;
 	/*std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
 	std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;*/
+	// std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
+	// std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;
 	this->_request_buffer.clear();
 	if (this->_total_body_size == this->_request.headers.content_length) {
 		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_PEEK | MSG_DONTWAIT)) != -1) {
@@ -407,7 +412,6 @@ void Request::handle_content_length() {
 			this->_status = BAD_REQUEST;
 			return ;
 		}
-		this->_request.raw_body = this->_request.raw_body.substr(0, this->_request.headers.content_length);
 		parse_body();
 		return ;
 	}
@@ -418,6 +422,257 @@ void Request::handle_content_length() {
 		return ;
 	}
 }
+
+static bool in_quotes(std::string str, size_t pos) {
+	int	c = 0;
+
+	for (size_t i = 0; i < pos; i++)
+		if (str[i] == '"')
+			c++;
+	return (c % 2 == 1);
+}
+
+static bool is_filename(std::string section) {
+	size_t	pos;
+	bool	exists = false;
+
+	std::string line = section.substr(0, section.find("\r\n"));
+	while ((pos = line.find("filename=")) != std::string::npos) {
+		if (in_quotes(line, pos)) {
+			line = line.substr(pos + 9);
+			continue ;
+		}
+		exists = true;
+		break ;
+	}
+	if (exists) {
+		section = section.substr(section.find("\r\n") + 2);
+		line = section.substr(0, section.find("\r\n"));
+		if (line.find("Content-Type:") != std::string::npos)
+			return true;
+	}
+	return false;
+}
+
+static std::string get_field_value(std::string line, std::string field) {
+	size_t	pos;
+
+	while ((pos = line.find(field)) != std::string::npos) {
+		if (in_quotes(line, pos)) {
+			line = line.substr(pos + field.size() + 1);
+			continue ;
+		}
+		break ;
+	}
+	std::string value = line.substr(pos + field.size() + 1);
+	value = value.substr(0, value.find("\""));
+	return value;
+}
+
+static	std::string get_random_file_name() {
+	std::string		ret;
+	std::string		chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	size_t			len = 10;
+
+	srand(time(NULL));
+	for (size_t i = 0; i < len; i++)
+		ret += chars[rand() % chars.size()];
+	return ret;
+}
+
+static	std::string get_section_filename(std::string data, std::string boundary, bool& is_file) {
+	size_t		pos;
+	std::string	line;
+
+	is_file = false;
+	pos = data.find(boundary);
+	if (pos == std::string::npos)
+		return "";
+	data = data.substr(pos + boundary.size());
+	if ((pos = data.find("\r\n")) == std::string::npos)
+		return "";
+	line = data.substr(pos + 2);
+	if (is_filename(line))
+		is_file = true;
+	return get_field_value(line, "filename=");
+}
+
+void	Request::make_new_section() {
+	bool	is_file = false;
+
+	std::string filename = get_section_filename(this->_request.raw_body, this->_request.boundary, is_file);
+	if (is_file) {
+		filename = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + filename;
+		this->_file.open(filename.c_str(), std::ios::out | std::ios::binary);
+		if (!this->_file.is_open())
+			{setRequestState(CANT_O_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+	}
+	t_post_raw post_raw = {filename, is_file, false, BOUNDRY, 0};
+	this->_post_raw.push_back(post_raw);
+}
+
+bool	Request::is_last_boundary() {
+	std::string boundry = this->_request.boundary;
+
+	if (this->_request.raw_body.substr(0, boundry.size() + 2) == (boundry + "--")) {
+		this->_request.raw_body.clear();
+		if (DEBUG) {
+			std::cout << "Done with all sections" << std::endl;
+			std::cout << "Sections size: " << this->_post_raw.size() << std::endl;
+		}
+		this->_state = DONE;
+		return true;
+	}
+	return false;
+}
+
+void	Request::skip_boundary(t_post_raw& post_raw) {
+	size_t			pos;
+	std::string		boundry = this->_request.boundary;
+
+	if ((pos = this->_request.raw_body.find(boundry)) == std::string::npos)
+		{std::cout << "Boundry not found" << std::endl; return ;}
+	this->_request.raw_body = this->_request.raw_body.substr(this->_request.raw_body.find("\r\n") + 2);
+	post_raw.section = CONTENT_DIS;
+}
+
+void	Request::skip_content_dis(t_post_raw& post_raw) {
+	size_t			pos;
+
+	if ((pos = this->_request.raw_body.find("Content-Disposition:")) == std::string::npos)
+		{std::cout << "Content-Disposition not found" << std::endl; return ;}
+	this->_request.raw_body = this->_request.raw_body.substr(this->_request.raw_body.find("\r\n") + 2);
+	post_raw.section = CONTENT_TYP;
+}
+
+void	Request::skip_content_typ(t_post_raw& post_raw) {
+	size_t			pos;
+
+	if ((pos = this->_request.raw_body.find("Content-Type:")) == std::string::npos) {
+		this->_request.raw_body = this->_request.raw_body.substr(this->_request.raw_body.find("\r\n") + 2);
+		post_raw.section = CONTENT;
+		post_raw.is_file = false;
+	}
+	else {
+		this->_request.raw_body = this->_request.raw_body.substr(this->_request.raw_body.find("\r\n") + 2);
+		post_raw.section = EMPTY_LINE;
+		post_raw.is_file = true;
+	}
+}
+
+void	Request::skip_crlf(t_post_raw& post_raw) {
+	size_t			pos;
+
+	if ((pos = this->_request.raw_body.find("\r\n")) == std::string::npos)
+		{std::cout << "CRLF not found" << std::endl; return ;}
+	this->_request.raw_body = this->_request.raw_body.substr(pos + 2);
+	post_raw.section = CONTENT;
+}
+
+void	Request::write_content(t_post_raw& post_raw) {
+	size_t			pos;
+	std::string		boundry = this->_request.boundary;
+
+	if ((pos = this->_request.raw_body.find(boundry)) != std::string::npos) {
+		this->_file.write(this->_request.raw_body.c_str(), pos - 2);
+		if (this->_file.bad())
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+		this->_file.close();
+		post_raw.sec_size += (pos - 2);
+		this->_request.raw_body = this->_request.raw_body.substr(pos);
+		post_raw.finished = true;
+		if (DEBUG)
+			std::cout << "Done with file: " << KBLU << post_raw.filename << KNRM << " size: " << post_raw.sec_size << std::endl;
+	}
+	else {
+		std::streampos	pos = this->_file.tellp();
+		this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
+		if (this->_file.bad())
+			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+		std::streamsize bw = this->_file.tellp() - pos;
+		post_raw.sec_size += bw;
+		this->_request.raw_body = this->_request.raw_body.substr(bw);
+	}
+}
+
+void	Request::store_content(t_post_raw& post_raw) {
+	size_t			pos;
+	std::string		boundry = this->_request.boundary;
+
+	if ((pos = this->_request.raw_body.find(boundry)) != std::string::npos) {
+		post_raw.data.append(this->_request.raw_body, 0, pos - 2);
+		this->_request.raw_body = this->_request.raw_body.substr(pos);
+		post_raw.finished = true;
+		post_raw.sec_size += (pos - 2);
+	}
+	else {
+		post_raw.data.append(this->_request.raw_body);
+		post_raw.sec_size += this->_request.raw_body.size();
+		this->_request.raw_body.clear();
+	}
+}
+
+void	Request::handle_multipart() {
+	size_t			pos;
+	std::string 	boundry = this->_request.boundary;
+	bool			is_file = false;
+
+	while (this->_request.raw_body.size() > 0) {
+		if (this->_post_raw.size() == 0)
+			make_new_section();
+		else if (this->_post_raw.back().finished) {
+			if (is_last_boundary())
+				return ;
+			make_new_section();
+		}
+		t_post_raw& post_raw = this->_post_raw.back();
+		if (post_raw.section == BOUNDRY)
+			skip_boundary(post_raw);
+		if (post_raw.section == CONTENT_DIS)
+			skip_content_dis(post_raw);
+		if (post_raw.section == CONTENT_TYP)
+			skip_content_typ(post_raw);
+		if (post_raw.section == EMPTY_LINE)
+			skip_crlf(post_raw);
+		if (post_raw.section == CONTENT) {
+			if (post_raw.is_file)
+				write_content(post_raw);
+			else
+				store_content(post_raw);
+		}
+	}
+}
+
+void	Request::handle_raw_post() {
+	char		buffer[100];
+	int			ret;
+	std::string	file_name;
+
+	if (this->_post_raw.size() == 0) {
+		file_name = get_random_file_name();
+		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
+		if (!this->_file.is_open())
+			{setRequestState(CANT_O_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+		t_post_raw post_raw = {file_name, true, false, BOUNDRY, 0};
+		this->_post_raw.push_back(post_raw);
+	}
+	std::streampos	pos = this->_file.tellp();
+	this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
+	if (this->_file.bad())
+		{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); return ;}
+	std::streamsize bytes_written = this->_file.tellp() - pos;
+	this->_request.raw_body.substr(0, bytes_written);
+	t_post_raw& post_raw = this->_post_raw.back();
+	post_raw.sec_size += bytes_written;
+}
+
+void Request::write_to_file() {
+	if (this->_request.boundary.size() > 0)
+		handle_multipart();
+	else
+		handle_raw_post();
+}
+
 
 void Request::handle_chunked() {
 	size_t			pos;
@@ -460,12 +715,12 @@ void Request::handle_chunked() {
 
 void Request::parse_body() {
 
-	if (this->_request.body.size() == 0)
-		this->_request.body = this->_request.raw_body;
-	if (this->_total_body_size == 0)
-		{this->_state = DONE; return ;}
-	if (this->_request.boundary.size() > 0)
-		parse_multipart();
+	// if (this->_request.body.size() == 0)
+	// 	this->_request.body = this->_request.raw_body;
+	// if (this->_total_body_size == 0)
+	// 	{this->_state = DONE; return ;}
+	// if (this->_request.boundary.size() > 0)
+	// 	parse_multipart();
 	this->_state = DONE;
 }
 
@@ -485,6 +740,7 @@ bool	Request::check_content_length(int ret) {
 			}
 			break ;
 		}
+		// std::cout << "length b : " << KRED << b << KNRM << std::endl;
 		//std::cout << "length b : " << KRED << b << KNRM << std::endl;
 	}
 	return true;
@@ -497,6 +753,7 @@ void	Request::recvRequest() {
 	if (this->_state == DONE || this->_state == ERROR) return ;
 	ret = recv(this->_fd, buffer, BUFFER_SIZE, 0);
 	this->_recv_bytes = ret;
+	// std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
 	//std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
 	if (ret == -1 || ret == 0) {
 		this->_status = INTERNAL_SERVER_ERROR;
@@ -564,37 +821,6 @@ void	Request::extract_query_string() {
 	parse_query_string();
 }
 
-static bool in_quotes(std::string str, size_t pos) {
-	int	c = 0;
-
-	for (size_t i = 0; i < pos; i++)
-		if (str[i] == '"')
-			c++;
-	return (c % 2 == 1);
-}
-
-static bool is_filename(std::string section) {
-	size_t	pos;
-	bool	exists = false;
-
-	std::string line = section.substr(0, section.find("\r\n"));
-	while ((pos = line.find("filename=")) != std::string::npos) {
-		if (in_quotes(line, pos)) {
-			line = line.substr(pos + 9);
-			continue ;
-		}
-		exists = true;
-		break ;
-	}
-	if (exists) {
-		section = section.substr(section.find("\r\n") + 2);
-		line = section.substr(0, section.find("\r\n"));
-		if (line.find("Content-Type:") != std::string::npos)
-			return true;
-	}
-	return false;
-}
-
 void	Request::parse_multipart() {
 	size_t			pos;
 	std::string		boundary;
@@ -621,21 +847,6 @@ void	Request::parse_multipart() {
 		if (this->_state == ERROR)
 			return ;
 	}
-}
-
-static std::string get_field_value(std::string line, std::string field) {
-	size_t	pos;
-
-	while ((pos = line.find(field)) != std::string::npos) {
-		if (in_quotes(line, pos)) {
-			line = line.substr(pos + field.size() + 1);
-			continue ;
-		}
-		break ;
-	}
-	std::string value = line.substr(pos + field.size() + 1);
-	value = value.substr(0, value.find("\""));
-	return value;
 }
 
 void	Request::handle_post_file(std::string section) {
