@@ -100,7 +100,7 @@ static	std::string	exec_job(pid_t *grandchild, char *executer, char *script, cha
 		else if (s > 0 && FD_ISSET(pi[0], &r_copy)) {
 			std::memset(buffer, 0, sizeof(buffer));
 			s = read(pi[0], buffer, CGI_PIPE_MAX_SIZE -1);
-			if (s <= 0) break ;
+				if (s <= 0) break ;
 			output.append(buffer, s);
 		}
 		else	{kill(*grandchild, SIGINT); output = "webserv_cgi_status=504; cgi TIMEOUT"; break ;}
@@ -466,12 +466,7 @@ void	Sockets::recvFrom(int sock_fd) {
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
 		char buffer[BUFFER_SIZE];
 		int	b;
-		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1) {
-			std::cout << KRED << "b: " << b << KNRM << std::endl;
-		}
-		if (pai->second->first.getState() == ERROR) {
-			std::cout << KRED << "Error: " << pai->second->first._request.error_message << KNRM << std::endl;
-		}
+		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1); 
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();

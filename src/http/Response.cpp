@@ -120,12 +120,10 @@ static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 	struct	dirent		*direct;
 	struct	stat		file_status;
 	std::string		new_uri;
-	while ((direct = readdir(dir))) {
+	while (dir && (direct = readdir(dir))) {
 		new_uri = conc_urls(uri, direct->d_name);
 		output << "<a href=\"";
-		/*if (!std::strcmp(direct->d_name, ".") || !std::strcmp(direct->d_name, ".."))
-			output << direct->d_name<< "\">" << direct->d_name;
-		else	*/output << "javascript:;\" onclick=\"c_redir('" << direct->d_name << "')\">" << direct->d_name;
+		output << "javascript:;\" onclick=\"c_redir('" << direct->d_name << "')\">" << direct->d_name;
 		std::memset(&file_status, 0, sizeof(file_status));
 		if (stat(new_uri.c_str(), &file_status) == -1) {
 			output << "<p style=\"color:red;\">size_retrieval_failed</p></a><hr/>";
@@ -135,7 +133,7 @@ static	std::string	generate_auto_index(std::string uri, ServerConfig *server) {
 	}
 	output <<	"</div></div></body></html>\n";
 	output.close();
-	closedir(dir);
+	if (dir)	closedir(dir);
 	return	target;
 }
 

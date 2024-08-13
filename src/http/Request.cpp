@@ -396,8 +396,8 @@ void Request::handle_content_length() {
 
 	this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
 	this->_total_body_size += this->_recv_bytes;
-	std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
-	std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;
+	/*std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
+	std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;*/
 	this->_request_buffer.clear();
 	if (this->_total_body_size == this->_request.headers.content_length) {
 		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_PEEK | MSG_DONTWAIT)) != -1) {
@@ -485,7 +485,7 @@ bool	Request::check_content_length(int ret) {
 			}
 			break ;
 		}
-		std::cout << "length b : " << KRED << b << KNRM << std::endl;
+		//std::cout << "length b : " << KRED << b << KNRM << std::endl;
 	}
 	return true;
 }
@@ -497,7 +497,7 @@ void	Request::recvRequest() {
 	if (this->_state == DONE || this->_state == ERROR) return ;
 	ret = recv(this->_fd, buffer, BUFFER_SIZE, 0);
 	this->_recv_bytes = ret;
-	std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
+	//std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
 	if (ret == -1 || ret == 0) {
 		this->_status = INTERNAL_SERVER_ERROR;
 		this->_state = ERROR;
