@@ -464,9 +464,10 @@ void	Sockets::recvFrom(int sock_fd) {
 	}
 	pai->second->first.recvRequest();
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
-		char buffer[BUFFER_SIZE];
-		int	b;
-		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0 && b != -1) ;
+		char	buffer[BUFFER_SIZE];
+		while (recv(sock_fd, buffer, BUFFER_SIZE-1, MSG_DONTWAIT|MSG_PEEK) > 0
+			&& recv(sock_fd, buffer, BUFFER_SIZE -1, MSG_DONTWAIT) != 0)
+				std::cout << "draining:|||" << buffer << "|||" << std::endl;
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();
@@ -564,10 +565,8 @@ void	Sockets::kqueueLoop() {
 			for (int i=0; i < n; i++)
 			{
 				if (!events[i].udata && (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
-					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF)) {
-					if (DEBUG) std::cout << KRED << "\t  [err/eof on: " << events[i].ident << "]" << KNRM << std::endl;
+					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF))
 					this->closeConn(events[i].ident);
-				}
 				else if (events[i].filter == EVFILT_READ) {
 					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket) 
 						this->accept(events[i].ident);
