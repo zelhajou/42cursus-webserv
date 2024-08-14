@@ -9,3 +9,4 @@ audio-sample.mp3
 config/cgi_comm/*
 config/html_generated_files/*
 config/html_default_error_files/*
+www/upload

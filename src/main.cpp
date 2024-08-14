@@ -72,7 +72,7 @@ int main(int argc, char *argv[], char **env)
 	MainConfig 	main_config_validated;
 	std::string cwd;
 	
-	atexit(leaks_fun);
+	// atexit(leaks_fun);
 	fix_up_signals(sig_nan);
 	std::string	config_file;
 	if (argc > 2) {
@@ -102,6 +102,7 @@ int main(int argc, char *argv[], char **env)
 		std::vector<ServerConfig *>::iterator it = main_config.servers.begin();
 		for (; it != main_config.servers.end(); ++it)
 			delete *it;
+		return 1;
 	}
 	return 0;
 }

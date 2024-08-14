@@ -5,6 +5,7 @@ Sockets	&Sockets::operator = (const Sockets &S) { (void)S; return *this;}
 
 void	fix_up_signals(void (*f)(int)) {
 	signal(SIGPIPE, SIG_IGN);
+	signal(SIGHUP, SIG_IGN);
 	signal(SIGTERM, f);
 	signal(SIGQUIT, f);
 	signal(SIGINT, f);
@@ -19,7 +20,7 @@ static	void	child_ex(int sig_num) {
 
 Sockets::Sockets( void ) : active_master(0), _main_proc(true) {
 	std::srand(std::time(NULL));
-	// std::cout << CLR_TERM;
+	std::cout << CLR_TERM;
 }
 
 Sockets::~Sockets() {
@@ -570,21 +571,33 @@ void	Sockets::kqueueLoop() {
 		if (n > 0)
 			for (int i=0; i < n; i++)
 			{
-				if (!events[i].udata && (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
-					|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF))
-					this->closeConn(events[i].ident);
-				else if (events[i].filter == EVFILT_READ) {
-					if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket) 
-						this->accept(events[i].ident);
-					else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end()) 
-						this->cgi_out(events[i]);
-					else 
-						this->recvFrom(events[i].ident);
+				try {
+					if (!events[i].udata && (events[i].flags & EV_ERROR || events[i].fflags & EV_ERROR
+						|| events[i].flags & EV_EOF || events[i].fflags & EV_EOF))
+						this->closeConn(events[i].ident);
+					else if (events[i].filter == EVFILT_READ) {
+						if ((it = this->_fd_to_server.find(events[i].ident)) != this->_fd_to_server.end() && it->first == it->second->_socket) 
+							this->accept(events[i].ident);
+						else if ((iit = this->_cgi_clients.find(events[i].ident)) != this->_cgi_clients.end()) 
+							this->cgi_out(events[i]);
+						else 
+							this->recvFrom(events[i].ident);
+					}
+					else if (events[i].filter == EVFILT_WRITE) 
+						this->sendTo(events[i].ident);
+					else if (events[i].filter == EVFILT_PROC) 
+						this->update_cgi_state(events[i]);
 				}
-				else if (events[i].filter == EVFILT_WRITE) 
-					this->sendTo(events[i].ident);
-				else if (events[i].filter == EVFILT_PROC) 
-					this->update_cgi_state(events[i]);
+				catch (std::exception &l) {
+					if (events[i].udata && std::string((char *)events[i].udata) == "unix") {
+						this->_kqueue.SET_QUEUE(events[i].ident, EVFILT_READ, 0);
+						close(events[i].ident);
+					}
+					else if (events[i].udata && std::string((char *)events[i].udata) == "pid") {
+						this->_kqueue.SET_QUEUE(events[i].ident, EVFILT_PROC, 0);
+						kill(events[i].ident, SIGINT);
+					}
+				}
 			}
 	}
 }

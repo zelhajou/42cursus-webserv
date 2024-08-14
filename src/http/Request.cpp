@@ -15,7 +15,22 @@ Request::Request(const Request &R) { *this = R; }
 Request	&Request::operator = (const Request &R) { (void)R; return *this; }
 
 Request::~Request() {
+	if (this->_file.is_open())
+		this->_file.close();
 	::freeTrie(this->_location_tree);
+}
+
+static size_t	strtosize_t(std::string str) {
+	size_t ret = 0;
+	size_t tmp = 0;
+
+	for (size_t i = 0; i < str.size(); i++) {
+		tmp = ret;
+		ret = ret * 10 + (str[i] - '0');
+		if (ret < tmp)
+			return SIZE_MAX;
+	}
+	return ret;
 }
 
 void Request::setLocation() {
@@ -27,7 +42,7 @@ void Request::setLocation() {
 			break ;
 		}
 	}
-	this->_max_body_size = std::strtoll(server->client_max_body_size.c_str(), NULL, 10);
+	this->_max_body_size = strtosize_t(server->client_max_body_size);
 
 	std::map<std::string, LocationConfig>::iterator itm;
 	for (itm = server->locations.begin(); itm != server->locations.end(); itm++) {
@@ -72,6 +87,11 @@ bool	Request::is_cgi(LocationConfig *loc) {
 		|| !loc->cgi_allowed_methods.size())	return false;
 	std::string uri = this->_request.first_line.uri;
 	for (std::vector<std::string>::iterator it = loc->add_cgi.begin();it != loc->add_cgi.end(); ++it)
+	{
+		if (loc->index.size() > 0 && is_directory(uri, R_OK)) {
+			this->_request.first_line.uri += "/" + loc->index;
+			uri = this->_request.first_line.uri;
+		}
 		if (match_extension(uri, *it, pos)) {
 			std::string	temp_uri = uri.substr(pos);
 			npos = temp_uri.find("/");
@@ -82,6 +102,7 @@ bool	Request::is_cgi(LocationConfig *loc) {
 			if (temp_uri == *it) { this->_cgi_info.first = *it; return true; }
 			else	this->_cgi_info.second.clear();
 		}
+	}
 	return false;
 }
 
@@ -365,7 +386,7 @@ void Request::parse_headers() {
 
 	this->_request.headers.host = this->_request.raw_headers["Host"].substr(0, this->_request.raw_headers["Host"].find(":"));
 	this->_request.headers.connection = this->_request.raw_headers["Connection"];
-	size_t content_length = std::strtoll(this->_request.raw_headers["Content-Length"].c_str(), NULL, 10);
+	size_t content_length = strtosize_t(this->_request.raw_headers["Content-Length"]);
 	this->_request.headers.content_length = content_length;
 	this->_request.headers.transfer_encoding = this->_request.raw_headers["Transfer-Encoding"];
 	this->_request.headers.content_type = this->_request.raw_headers["Content-Type"];
@@ -394,8 +415,6 @@ void Request::handle_content_length() {
 
 	this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
 	this->_total_body_size += this->_recv_bytes;
-	/*std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
-	std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;*/
 	// std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
 	// std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;
 	this->_request_buffer.clear();
@@ -575,7 +594,7 @@ void	Request::write_content(t_post_raw& post_raw) {
 	if ((pos = this->_request.raw_body.find(boundry)) != std::string::npos) {
 		this->_file.write(this->_request.raw_body.c_str(), pos - 2);
 		if (this->_file.bad())
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+			{remove_files(); return ;}
 		this->_file.close();
 		post_raw.sec_size += (pos - 2);
 		this->_request.raw_body = this->_request.raw_body.substr(pos);
@@ -587,7 +606,7 @@ void	Request::write_content(t_post_raw& post_raw) {
 		std::streampos	pos = this->_file.tellp();
 		this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
 		if (this->_file.bad())
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+			{remove_files(); return ;}
 		std::streamsize bw = this->_file.tellp() - pos;
 		post_raw.sec_size += bw;
 		this->_request.raw_body = this->_request.raw_body.substr(bw);
@@ -608,6 +627,18 @@ void	Request::store_content(t_post_raw& post_raw) {
 		post_raw.data.append(this->_request.raw_body);
 		post_raw.sec_size += this->_request.raw_body.size();
 		this->_request.raw_body.clear();
+	}
+}
+
+void Request::remove_files() {
+
+	setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR);
+	this->_state = ERROR;
+	this->_status = INTERNAL_SERVER_ERROR;
+	std::vector<t_post_raw>::iterator it = this->_post_raw.begin();
+	for (; it != this->_post_raw.end(); it++) {
+		if (it->is_file && stat(it->filename.c_str(), NULL) == 0)
+			std::remove(it->filename.c_str());
 	}
 }
 
@@ -650,14 +681,14 @@ void	Request::handle_raw_post() {
 		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
 		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
 		if (!this->_file.is_open())
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+			{remove_files(); return ;}
 		t_post_raw post_raw = {file_name, true, false, BOUNDRY, 0, ""};
 		this->_post_raw.push_back(post_raw);
 	}
 	std::streampos	pos = this->_file.tellp();
 	this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
 	if (this->_file.bad())
-		{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+		{remove_files(); return ;}
 	std::streamsize bytes_written = this->_file.tellp() - pos;
 	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
 	t_post_raw& post_raw = this->_post_raw.back();
@@ -699,7 +730,7 @@ void Request::handle_chunked() {
 		tmp = this->_request_buffer.substr(0, pos);
 		this->_request_buffer = this->_request_buffer.substr(pos + 2);
 		if (this->_chunk_size == 0 && is_hex(tmp)) {
-			this->_chunk_size = std::strtoll(tmp.c_str(), NULL, 16);
+			this->_chunk_size = std::strtol(tmp.c_str(), NULL, 16);
 			if (this->_chunk_size == 0) {parse_body(); return ;}
 		}
 		else
@@ -729,19 +760,15 @@ bool	Request::check_content_length(int ret) {
 	int		b;
 
 	if (ret < BUFFER_SIZE && this->_request.headers.content_length > 0) {
-		while ((b = recv(this->_fd, buffer, 10, MSG_PEEK | MSG_DONTWAIT)) != -1) {
-			if (b == 0 && this->_total_body_size + static_cast<size_t>(ret) < this->_request.headers.content_length) {
-				// std::cout << "Ret : " << KRED << ret << KNRM << std::endl;
-				// std::cout << "Content-Length " << KRED << this->_request.headers.content_length << KNRM << " does not match body size " << KRED << this->_total_body_size + static_cast<size_t>(ret) << KNRM << std::endl;
-				setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
-				this->_state = ERROR;
-				this->_status = BAD_REQUEST;
-				return false;
-			}
-			break ;
+		b = recv(this->_fd, buffer, 1, MSG_PEEK | MSG_DONTWAIT);
+		if (b == 0 && this->_total_body_size + static_cast<size_t>(ret) < this->_request.headers.content_length) {
+			// std::cout << "Ret : " << KRED << ret << KNRM << std::endl;
+			// std::cout << "Content-Length " << KRED << this->_request.headers.content_length << KNRM << " does not match body size " << KRED << this->_total_body_size + static_cast<size_t>(ret) << KNRM << std::endl;
+			setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
+			this->_state = ERROR;
+			this->_status = BAD_REQUEST;
+			return false;
 		}
-		// std::cout << "length b : " << KRED << b << KNRM << std::endl;
-		//std::cout << "length b : " << KRED << b << KNRM << std::endl;
 	}
 	return true;
 }

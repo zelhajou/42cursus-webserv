@@ -96,6 +96,8 @@ public:
 	void						skip_content_dis(t_post_raw&);
 	void						skip_content_typ(t_post_raw&);
 	void						skip_crlf(t_post_raw&);
+	void						remove_files();
+	void						handle_cgi_dir();
 
 public:
 	int										_fd;
