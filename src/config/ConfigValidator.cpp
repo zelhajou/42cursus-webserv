@@ -6,7 +6,7 @@
 /*   By: zelhajou <zelhajou@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/08/06 13:39:35 by zelhajou          #+#    #+#             */
-/*   Updated: 2024/08/09 12:42:04 by zelhajou         ###   ########.fr       */
+/*   Updated: 2024/08/14 12:18:53 by zelhajou         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -153,17 +153,19 @@ void ConfigValidator::validateClientMaxBodySize(const std::string& size)
     if (size.empty())
         return;
 
-    size_t len = size.length();
-    if (len == 0 || len > 20)
-        throw std::runtime_error("Invalid client_max_body_size: " + size);
+    size_t result = 0;
+    std::string::const_iterator it;
+    for (it = size.begin(); it != size.end(); ++it) {
+        if (!isdigit(*it))
+            throw std::runtime_error("Invalid client_max_body_size, should contain only digits: " + size);
 
-    char last_char = size[len - 1];
-    if (!isdigit(last_char) && last_char != 'K' && last_char != 'M' && last_char != 'G')
-        throw std::runtime_error("Invalid client_max_body_size: " + size);
+        size_t digit = *it - '0';
+        
+        if (result > (ULONG_MAX - digit) / 10) {
+            throw std::runtime_error("Value overflow detected in client_max_body_size: " + size);
+        }
 
-    for (size_t i = 0; i < len - 1; ++i) {
-        if (!isdigit(size[i]))
-            throw std::runtime_error("Invalid client_max_body_size: " + size);
+        result = result * 10 + digit;
     }
 }
 
