@@ -16,17 +16,17 @@
 
 Sockets		S;
 
+void	leaks_fun(void)
+{
+	system("leaks webserv");
+}
+
 void	sig_nan(int sig_num)
 {
 	std::cout << KCYN << "main_process:" << KNRM
 		<< " received signal(" << KGRN << sig_num
 		<< KNRM << ") exiting..\n";
 	exit(sig_num);
-}
-
-void	leaks_fun(void)
-{
-	system("leaks webserv");
 }
 
 std::string readFile(const std::string& filepath)
@@ -51,7 +51,7 @@ std::string get_cwd(char *buf, size_t size)
 	if (cwd == NULL)
 		return "";
 	std::string cwd_str(cwd);
-	free(cwd);
+	delete cwd;
 	return cwd_str;
 }
 
@@ -68,7 +68,11 @@ MainConfig push_valid_servers(MainConfig &main_config)
 
 int main(int argc, char *argv[], char **env)
 {
-	// atexit(leaks_fun);
+	MainConfig	main_config;
+	MainConfig 	main_config_validated;
+	std::string cwd;
+	
+	atexit(leaks_fun);
 	fix_up_signals(sig_nan);
 	std::string	config_file;
 	if (argc > 2) {
@@ -83,16 +87,21 @@ int main(int argc, char *argv[], char **env)
 		std::vector<Token>	tokens = tokenizer.tokenize();
 
 		Parser	parser(tokens);
-		MainConfig	main_config = parser.parse();
+		main_config = parser.parse();
 
-		std::string cwd = get_cwd(NULL, 0);
+		cwd = get_cwd(NULL, 0);
 		ConfigValidator validator(main_config, cwd);
 		validator.validate();
-		MainConfig main_config_validated = push_valid_servers(main_config);
+		main_config_validated = push_valid_servers(main_config);
 
 		S.initiate_servers(main_config_validated, env);
 		S.run();
 	}
-	catch (std::exception &e) { std::cerr << KRED << e.what() << KNRM << std::endl; }
+	catch (std::exception &e) {
+		std::cerr << KRED << e.what() << KNRM << std::endl;
+		std::vector<ServerConfig *>::iterator it = main_config.servers.begin();
+		for (; it != main_config.servers.end(); ++it)
+			delete *it;
+	}
 	return 0;
 }

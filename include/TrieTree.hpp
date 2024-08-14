@@ -21,6 +21,7 @@ LocationConfig*	search(std::vector<LocationNode *>& root, std::string name, int 
 void			print(std::vector<LocationNode *>& root);
 void			setlvl(std::vector<LocationNode *>& root);
 int				cmp (std::string a, std::string b);
+void			freeTrie(std::vector<LocationNode *>& root);
 
 
 

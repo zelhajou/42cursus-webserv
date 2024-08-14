@@ -10,7 +10,8 @@ Response::Response():_new_session(false),  _file_type("NONE"), _has_cookies(fals
 
 Response::Response(const Response &R) { *this = R; }
 Response	&Response::operator = (const Response &R) { (void)R; return *this; }
-Response::~Response() {}
+Response::~Response() {
+}
 
 size_t	Response::get_file_size() {
 	std::streampos	fpos = this->_file.tellg();
@@ -183,6 +184,7 @@ void	Response::file_to_disk(int upload_buffer_size) {
 }
 
 void	Response::_initiate_response(int client, Sockets &sock, ServerConfig *server) {
+	(void)client;
 	if (this->_request->getStatus() == OK && !this->_request->_is_return) {
 		if (this->_request->_location_type == CGI) {/*hold_it*/}
 		else if (this->_request->_location_type == AUTOINDEX) {
