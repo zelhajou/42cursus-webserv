@@ -101,19 +101,19 @@ bool ConfigValidator::isValidIPAddress(const std::string& ip)
 	char *str = strdup(ip.c_str());
 	ptr = strtok(str, ".");
 	if (ptr == NULL)
-		return false;
+		{delete str; return false;}
 	while (ptr)
 	{
 		if (!isdigit(*ptr))
-			return false;
+			{delete str; return false;}
 		num = atoi(ptr);
 		if (num < 0 || num > 255)
-			return false;
+			{delete str; return false;}
 		ptr = strtok(NULL, ".");
 		if (ptr != NULL)
 			dots++;
 	}
-	free(str);
+	delete str;
 	if (dots != 3)
 		return false;
 	return true;

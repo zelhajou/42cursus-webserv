@@ -13,12 +13,13 @@ void	fix_up_signals(void (*f)(int)) {
 static	void	child_ex(int sig_num) {
 	std::cout << KCYN"master_process:" << KNRM << " received signal(" << KGRN << sig_num
 		<< KNRM << ") exiting..\n";
+
 	exit(sig_num);
 }
 
 Sockets::Sockets( void ) : active_master(0), _main_proc(true) {
 	std::srand(std::time(NULL));
-	std::cout << CLR_TERM;
+	// std::cout << CLR_TERM;
 }
 
 Sockets::~Sockets() {
@@ -32,7 +33,7 @@ Sockets::~Sockets() {
 		if (DEBUG && this->_main_proc)
 			std::cout << KRED"killing master process\n" << KNRM;
 		close(this->master_process);
-		kill(this->master_PID, SIGKILL);
+		kill(this->master_PID, SIGINT);
 	}
 	if (DEBUG && this->_main_proc)
 		std::cout << KRED"closing active connections..\n" << KNRM;
@@ -57,7 +58,7 @@ Sockets::~Sockets() {
 }
 
 std::string conc_urls(std::string s_1, std::string s_2) {
-	int	s_1_p = s_1.rfind("/"), s_2_p = s_2.find("/"),
+	size_t	s_1_p = s_1.rfind("/"), s_2_p = s_2.find("/"),
 		con_1 = s_1_p == std::string::npos || s_1_p != s_1.size() - 1,
 		con_2 = s_2_p == std::string::npos || s_2_p != 0;
 	s_2 = s_2.substr((!con_1 && !con_2) ? 1 : 0);
@@ -234,6 +235,7 @@ int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string e
 	if (listen(unix_listener, 5) < 0) return -1;
 	if ((pid = fork()) < 0) return -1;
 	if (pid == 0) {
+		delete pr_info;
 		this->_main_proc = false;
 		master_routine(this->socket_path, exec, uri, file, env);
 		exit(EXIT_FAILURE);
@@ -465,9 +467,13 @@ void	Sockets::recvFrom(int sock_fd) {
 	pai->second->first.recvRequest();
 	if (pai->second->first.getState() == DONE || pai->second->first.getState() == ERROR) {
 		char	buffer[BUFFER_SIZE];
-		while (recv(sock_fd, buffer, BUFFER_SIZE-1, MSG_DONTWAIT|MSG_PEEK) > 0
-			&& recv(sock_fd, buffer, BUFFER_SIZE -1, MSG_DONTWAIT) != 0)
-				std::cout << "draining:|||" << buffer << "|||" << std::endl;
+		int		b;
+
+		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
+			std::cout << "draining: " << b << std::endl;
+		// while (recv(sock_fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT | MSG_PEEK) > 0
+		// 	&& recv(sock_fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT) != 0)
+		// 		std::cout << "draining:|||" << buffer << "|||" << std::endl;
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();
@@ -585,9 +591,9 @@ void	Sockets::kqueueLoop() {
 
 static void initAddInfo(struct addrinfo& ai) {
 	memset(&ai, 0, sizeof(struct addrinfo));
+	ai.ai_flags = AI_PASSIVE;
 	ai.ai_family = AF_UNSPEC;
 	ai.ai_socktype = SOCK_STREAM;
-	ai.ai_flags = AI_PASSIVE;
 }
 
 static int getAddrInfo(struct addrinfo *hints, struct addrinfo **res, mit it) {
@@ -628,11 +634,14 @@ void	Sockets::startServers() {
 	int								sock;
 	int								nbr = 0;
 	bool							this_status = true;
-	std::vector<ServerConfig* >		servers = this->_main_config.servers;
+	std::vector<ServerConfig* >&	servers = this->_main_config.servers;
 
 	for (mit it = servers.begin(); it != servers.end(); it++) {
 		initAddInfo(hints);
-		if (getAddrInfo(&hints, &res, it) < 0) continue ;
+		if (getAddrInfo(&hints, &res, it) < 0) {
+			freeaddrinfo(res);
+			continue ;
+		}
 		if ((sock = createSocket(res, it)) < 0) {
 			std::map<int, ServerConfig*>::iterator	i = this->_fd_to_server.begin();
 			for(; i != this->_fd_to_server.end(); ++i)

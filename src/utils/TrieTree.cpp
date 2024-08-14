@@ -82,3 +82,11 @@ LocationConfig*	search(std::vector<LocationNode *>& root, std::string name, int 
 	}
 	return NULL;
 }
+
+void	freeTrie(std::vector<LocationNode *>& root) {
+	for (size_t i = 0; i < root.size(); i++) {
+		freeTrie(root[i]->children);
+		delete root[i];
+	}
+	root.clear();
+}

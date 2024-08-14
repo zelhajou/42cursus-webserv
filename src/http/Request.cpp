@@ -15,10 +15,7 @@ Request::Request(const Request &R) { *this = R; }
 Request	&Request::operator = (const Request &R) { (void)R; return *this; }
 
 Request::~Request() {
-	std::vector<LocationNode*>::iterator it;
-	for (it = this->_location_tree.begin(); it != this->_location_tree.end(); it++) {
-		delete *it;
-	}
+	::freeTrie(this->_location_tree);
 }
 
 void Request::setLocation() {
@@ -299,8 +296,6 @@ void	Request::set_method() {
 }
 
 void	Request::set_body() {
-	char	buffer[BUFFER_SIZE];
-	int		ret;
 
 	if (this->_state != BODY || this->_request.state == ERROR || this->_request.status != STATUS_NONE) {
 		this->_status = this->_request.status;
@@ -617,9 +612,7 @@ void	Request::store_content(t_post_raw& post_raw) {
 }
 
 void	Request::handle_multipart() {
-	size_t			pos;
 	std::string 	boundry = this->_request.boundary;
-	bool			is_file = false;
 
 	while (this->_request.raw_body.size() > 0) {
 		if (this->_post_raw.size() == 0)
@@ -650,12 +643,11 @@ void	Request::handle_multipart() {
 }
 
 void	Request::handle_raw_post() {
-	char		buffer[100];
-	int			ret;
 	std::string	file_name;
 
 	if (this->_post_raw.size() == 0) {
 		file_name = get_random_file_name();
+		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
 		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
 		if (!this->_file.is_open())
 			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
@@ -667,7 +659,7 @@ void	Request::handle_raw_post() {
 	if (this->_file.bad())
 		{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
 	std::streamsize bytes_written = this->_file.tellp() - pos;
-	this->_request.raw_body.substr(0, bytes_written);
+	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
 	t_post_raw& post_raw = this->_post_raw.back();
 	post_raw.sec_size += bytes_written;
 }
