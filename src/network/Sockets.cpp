@@ -20,7 +20,7 @@ static	void	child_ex(int sig_num) {
 
 Sockets::Sockets( void ) : active_master(0), _main_proc(true) {
 	std::srand(std::time(NULL));
-	std::cout << CLR_TERM;
+	// std::cout << CLR_TERM;
 }
 
 Sockets::~Sockets() {

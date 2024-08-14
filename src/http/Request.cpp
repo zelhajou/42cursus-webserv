@@ -679,6 +679,7 @@ void	Request::handle_raw_post() {
 	if (this->_post_raw.size() == 0) {
 		file_name = get_random_file_name();
 		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
+		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
 		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
 		if (!this->_file.is_open())
 			{remove_files(); return ;}
@@ -690,6 +691,7 @@ void	Request::handle_raw_post() {
 	if (this->_file.bad())
 		{remove_files(); return ;}
 	std::streamsize bytes_written = this->_file.tellp() - pos;
+	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
 	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
 	t_post_raw& post_raw = this->_post_raw.back();
 	post_raw.sec_size += bytes_written;

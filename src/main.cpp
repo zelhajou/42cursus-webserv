@@ -21,6 +21,11 @@ void	leaks_fun(void)
 	system("leaks webserv");
 }
 
+void	leaks_fun(void)
+{
+	system("leaks webserv");
+}
+
 void	sig_nan(int sig_num)
 {
 	std::cout << KCYN << "main_process:" << KNRM
@@ -51,6 +56,7 @@ std::string get_cwd(char *buf, size_t size)
 	if (cwd == NULL)
 		return "";
 	std::string cwd_str(cwd);
+	delete cwd;
 	delete cwd;
 	return cwd_str;
 }
@@ -88,10 +94,13 @@ int main(int argc, char *argv[], char **env)
 
 		Parser	parser(tokens);
 		main_config = parser.parse();
+		main_config = parser.parse();
 
+		cwd = get_cwd(NULL, 0);
 		cwd = get_cwd(NULL, 0);
 		ConfigValidator validator(main_config, cwd);
 		validator.validate();
+		main_config_validated = push_valid_servers(main_config);
 		main_config_validated = push_valid_servers(main_config);
 
 		S.initiate_servers(main_config_validated, env);
