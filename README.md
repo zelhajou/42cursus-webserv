@@ -523,7 +523,7 @@ Socket programming is a way of connecting two nodes on a network to communicate 
 
 	- <details>
 		<summary>
-			Client:
+			Client
 		</summary>
 		1. Create a socket using the `socket()` system call.
 			```c
@@ -561,7 +561,7 @@ Socket programming is a way of connecting two nodes on a network to communicate 
 
 	- <details>
 		<summary>
-			Server:
+			Server
 		</summary>
 		
 		1. Create a socket using the `socket()` system call.
@@ -602,7 +602,7 @@ Socket programming is a way of connecting two nodes on a network to communicate 
 
 	- <details>
 		<summary>
-			Client:
+			Client
 		</summary>
 		
 		1. Create a socket using the `socket()` system call.
@@ -622,6 +622,9 @@ Socket programming is a way of connecting two nodes on a network to communicate 
 			// recvfrom(): Receives data from a specific address.
 			```
 		</details>
+
+
+- [Sockets and Network Programming in C](https://www.codequoi.com/en/sockets-and-network-programming-in-c/)
 
 
 ### Non-blocking I/O and Multiplexing
@@ -732,9 +735,12 @@ The Hypertext Transfer Protocol (HTTP) is an application-layer protocol used for
 | <img src="https://github.com/user-attachments/assets/d6f06e60-fa31-45db-8d28-bb311939e5fc" alt="whats-http" width="400"/> | <img src="https://github.com/user-attachments/assets/d80b4962-f449-45ec-abb7-a64298b86d6e" alt="http2" width="400"/> |
 |:-------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------:|
 
+- [How do HTTP requests get sent to the right place?](https://jvns.ca/blog/2016/07/14/whats-sni/)
 - [Everything you need to know about HTTP](https://cs.fyi/guide/http-in-depth)
 
-- **Request Methods**:
+**Request Methods**: 
+
+Request methods indicate the desired action to be performed on a resource. Common HTTP methods include:
 
 <img src="https://github.com/user-attachments/assets/989fabcb-05e4-4859-ad08-f6a1f99b0795" alt="request-methods-1" width="400"/>
 
@@ -799,7 +805,7 @@ X-XSS-Protection: 1; mode=block
 - [HTTP Headers - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers)
 
 
----
+## Resources
 
 - [C++ Network Programming Part 1: Sockets](https://youtu.be/gntyAFoZp-E)
 - [Sockets in Operating System](https://youtu.be/uagKTbohimU)
@@ -807,6 +813,8 @@ X-XSS-Protection: 1; mode=block
 - [Socket Programming in C - Tutorialspoint](https://www.tutorialspoint.com/unix_sockets/socket_server_example.htm)
 - [Sockets and Pipes Look Like Files (Unix/fdopen)](https://youtu.be/il4N6KjVQ-s)
 
+- [NGINX Configuration Guide](https://www.plesk.com/blog/various/nginx-configuration-guide/)
 
+**GitHub Repositories**:
 
-
+- [webserv - README](https://github.com/achrafelkhnissi/webserv)
