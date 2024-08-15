@@ -4,11 +4,12 @@ Sockets::Sockets(const Sockets &S) {*this = S; this->_main_proc = true;}
 Sockets	&Sockets::operator = (const Sockets &S) { (void)S; return *this;}
 
 void	fix_up_signals(void (*f)(int)) {
-	signal(SIGPIPE, SIG_IGN);
-	signal(SIGHUP, SIG_IGN);
-	signal(SIGTERM, f);
-	signal(SIGQUIT, f);
-	signal(SIGINT, f);
+	(void)f;
+	// signal(SIGPIPE, SIG_IGN);
+	// signal(SIGHUP, SIG_IGN);
+	// signal(SIGTERM, f);
+	// signal(SIGQUIT, f);
+	// signal(SIGINT, f);
 }
 
 static	void	child_ex(int sig_num) {
@@ -470,11 +471,10 @@ void	Sockets::recvFrom(int sock_fd) {
 		char	buffer[BUFFER_SIZE];
 		int		b;
 
-		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
-			std::cout << "draining: " << b << std::endl;
-		// while (recv(sock_fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT | MSG_PEEK) > 0
-		// 	&& recv(sock_fd, buffer, BUFFER_SIZE - 1, MSG_DONTWAIT) != 0)
-		// 		std::cout << "draining:|||" << buffer << "|||" << std::endl;
+		while ((b = recv(sock_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT)) > 0) ;
+		if (pai->second->first.getState() == ERROR) {
+			std::cout << "error\n" << pai->second->first._request.error_message << std::endl;
+		}
 		this->_kqueue.SET_QUEUE(sock_fd, EVFILT_READ, 0);
 		pai->second->second._request = &pai->second->first;
 		pai->second->second._response_status = pai->second->first.getStatus();

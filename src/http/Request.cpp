@@ -9,6 +9,8 @@ Request::Request() : _fd(-1), _max_body_size(0), _state(FIRST_LINE), _status(OK)
 	this->_request.raw_body.clear();
 	this->_location_type = LOC_NONE;
 	this->_total_body_size = 0;
+	this->_ret_bytes = 0;
+	this->_recv_bytes = 0;
 }
 
 Request::Request(const Request &R) { *this = R; }
@@ -88,11 +90,10 @@ bool	Request::is_cgi(LocationConfig *loc) {
 	std::string uri = this->_request.first_line.uri;
 	for (std::vector<std::string>::iterator it = loc->add_cgi.begin();it != loc->add_cgi.end(); ++it)
 	{
-		if (loc->index.size() > 0 && is_directory(uri, R_OK)) {
-			this->_request.first_line.uri += "/" + loc->index;
+		if (loc->index.size() > 0 && is_directory(uri, R_OK))
 			uri = this->_request.first_line.uri;
-		}
 		if (match_extension(uri, *it, pos)) {
+			this->_request.first_line.uri = uri;
 			std::string	temp_uri = uri.substr(pos);
 			npos = temp_uri.find("/");
 			if (npos != std::string::npos) {
@@ -271,6 +272,7 @@ void Request::set_first_line() {
 	this->_request.raw_first_line = this->_request_buffer.substr(0, pos);
 	this->_request_buffer = this->_request_buffer.substr(pos + 2);
 	this->_recv_bytes -= (pos + 2);
+	this->_ret_bytes -= (pos + 2);
 	parse_first_line();
 	this->_state = HEADERS;
 }
@@ -287,6 +289,7 @@ void	Request::set_headers() {
 	std::string headers = this->_request_buffer.substr(0, pos);
 	this->_request_buffer = this->_request_buffer.substr(pos + 4);
 	this->_recv_bytes -= (pos + 4);
+	this->_ret_bytes -= (pos + 4);
 	while ((pos = headers.find("\r\n")) != std::string::npos) {
 		std::string line = headers.substr(0, pos);
 		headers = headers.substr(pos + 2);
@@ -403,6 +406,8 @@ void Request::parse_headers() {
 }
 
 static bool is_hex(std::string str) {
+	if (str.size() == 0)
+		return false;
 	for (size_t i = 0; i < str.size(); i++)
 		if (!std::isxdigit(str[i]))
 			return false;
@@ -415,8 +420,6 @@ void Request::handle_content_length() {
 
 	this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
 	this->_total_body_size += this->_recv_bytes;
-	// std::cout << "Total body size : " << KRED << this->_total_body_size << KNRM << std::endl;
-	// std::cout << "Content length : " << KRED << this->_request.headers.content_length << KNRM << std::endl;
 	this->_request_buffer.clear();
 	if (this->_total_body_size == this->_request.headers.content_length) {
 		while ((ret = recv(this->_fd, buffer, BUFFER_SIZE, MSG_PEEK | MSG_DONTWAIT)) != -1) {
@@ -430,7 +433,7 @@ void Request::handle_content_length() {
 		return ;
 	}
 	if (this->_total_body_size > this->_request.headers.content_length) {
-		setRequestState(BD_TOO_BIG, BAD_REQUEST, ERROR);
+		setRequestState(LEN_NOT_MATCH, BAD_REQUEST, ERROR);
 		this->_state = ERROR;
 		this->_status = BAD_REQUEST;
 		return ;
@@ -534,10 +537,6 @@ bool	Request::is_last_boundary() {
 
 	if (this->_request.raw_body.substr(0, boundry.size() + 2) == (boundry + "--")) {
 		this->_request.raw_body.clear();
-		if (DEBUG) {
-			std::cout << "Done with all sections" << std::endl;
-			std::cout << "Sections size: " << this->_post_raw.size() << std::endl;
-		}
 		this->_state = DONE;
 		return true;
 	}
@@ -593,20 +592,26 @@ void	Request::write_content(t_post_raw& post_raw) {
 
 	if ((pos = this->_request.raw_body.find(boundry)) != std::string::npos) {
 		this->_file.write(this->_request.raw_body.c_str(), pos - 2);
-		if (this->_file.bad())
-			{remove_files(); return ;}
+		if (this->_file.bad()) {
+			std::cout << "Error writing to file!!" << std::endl;
+			remove_files();
+			return ;
+		}
 		this->_file.close();
 		post_raw.sec_size += (pos - 2);
 		this->_request.raw_body = this->_request.raw_body.substr(pos);
 		post_raw.finished = true;
 		if (DEBUG)
-			std::cout << "Done with file: " << KBLU << post_raw.filename << KNRM << " size: " << post_raw.sec_size << std::endl;
+			std::cout << "\t[Done with file: " << KBLU << post_raw.filename << KNRM << " size: " << post_raw.sec_size << "]" << std::endl;
 	}
 	else {
 		std::streampos	pos = this->_file.tellp();
 		this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
-		if (this->_file.bad())
-			{remove_files(); return ;}
+		if (this->_file.bad()) {
+			std::cout << "Error writing to file!!!" << std::endl;
+			remove_files();
+			return ;
+		}
 		std::streamsize bw = this->_file.tellp() - pos;
 		post_raw.sec_size += bw;
 		this->_request.raw_body = this->_request.raw_body.substr(bw);
@@ -622,6 +627,8 @@ void	Request::store_content(t_post_raw& post_raw) {
 		this->_request.raw_body = this->_request.raw_body.substr(pos);
 		post_raw.finished = true;
 		post_raw.sec_size += (pos - 2);
+		if (DEBUG)
+			std::cout << "Done with field: " << KBLU << post_raw.data << KNRM << " size: " << post_raw.sec_size << std::endl;
 	}
 	else {
 		post_raw.data.append(this->_request.raw_body);
@@ -679,64 +686,86 @@ void	Request::handle_raw_post() {
 	if (this->_post_raw.size() == 0) {
 		file_name = get_random_file_name();
 		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
-		file_name = this->_c_location->root + "/" + this->_c_location->upload_store + "/" + file_name;
 		this->_file.open(file_name.c_str(), std::ios::out | std::ios::binary);
 		if (!this->_file.is_open())
 			{remove_files(); return ;}
 		t_post_raw post_raw = {file_name, true, false, BOUNDRY, 0, ""};
 		this->_post_raw.push_back(post_raw);
 	}
-	std::streampos	pos = this->_file.tellp();
-	this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
-	if (this->_file.bad())
-		{remove_files(); return ;}
-	std::streamsize bytes_written = this->_file.tellp() - pos;
-	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
-	this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
-	t_post_raw& post_raw = this->_post_raw.back();
-	post_raw.sec_size += bytes_written;
+	try {
+		std::streampos	pos = this->_file.tellp();
+		this->_file.write(this->_request.raw_body.c_str(), this->_request.raw_body.size());
+		if (this->_file.bad())
+			{remove_files(); return ;}
+		std::streamsize bytes_written = this->_file.tellp() - pos;
+		this->_request.raw_body = this->_request.raw_body.substr(bytes_written);
+		t_post_raw& post_raw = this->_post_raw.back();
+		post_raw.sec_size += bytes_written;
+		if (this->_state == DONE || this->_state == ERROR)
+			this->_file.close();
+	}
+	catch (std::exception &e) {}
 }
 
 void Request::write_to_file() {
 	if (this->_location_type == CGI)
 		return ;
-	if (this->_request.boundary.size() > 0)
+	if (this->_request.boundary.size() > 0 && this->_request.headers.transfer_encoding != "chunked")
 		handle_multipart();
-	else
+	else if (this->_request.boundary.size() > 0 && this->_state == DONE)
+		handle_multipart();
+	else if (this->_request.boundary.size() == 0)
 		handle_raw_post();
 }
 
+void	Request::handle_positive_chunk() {
+	if (this->_chunk_size > 0) {
+		if (this->_chunk_size > this->_request_buffer.size()) {
+			this->_request.raw_body.append(this->_request_buffer);
+			this->_chunk_size -= this->_request_buffer.size();
+			this->_total_body_size += this->_request_buffer.size();
+			this->_request_buffer.clear();
+		}
+		else {
+			this->_request.raw_body.append(this->_request_buffer.substr(0, this->_chunk_size));
+			this->_request_buffer = this->_request_buffer.substr(this->_chunk_size);
+			if (this->_request_buffer.size() >= 2)
+				this->_request_buffer = this->_request_buffer.substr(2);
+			else
+				this->_request_buffer.clear();
+			this->_total_body_size += this->_chunk_size;
+			this->_chunk_size = 0;
+		}
+	}
+}
+
+void	Request::get_chunk_size() {
+	size_t	pos;
+
+	if ((pos = this->_request_buffer.find("\r\n")) == std::string::npos && this->_request_buffer.size() >= 6){
+		setRequestState(INV_CHUNK, INTERNAL_SERVER_ERROR, ERROR);
+		this->_state = ERROR;
+		this->_status = INTERNAL_SERVER_ERROR;
+		return ;
+	}
+	std::string tmp = this->_request_buffer.substr(0, pos);
+	if (is_hex(tmp)) {
+		this->_chunk_size = std::strtol(tmp.c_str(), NULL, 16);
+		if (this->_chunk_size == 0) {
+			this->_state = DONE;
+			this->_request.state = DONE;
+			return ;
+		}
+		this->_request_buffer = this->_request_buffer.substr(pos + 2);
+	}
+}
 
 void Request::handle_chunked() {
-	size_t			pos;
-	std::string		tmp;
 
-	while ((pos = this->_request_buffer.find("\r\n")) != std::string::npos || this->_chunk_size > 0) {
-		if (this->_chunk_size > 0) {
-			if (this->_chunk_size > this->_recv_bytes) {
-				this->_request.raw_body.append(this->_request_buffer, 0, this->_recv_bytes);
-				this->_chunk_size -= this->_recv_bytes;
-				this->_total_body_size += this->_recv_bytes;
-				this->_request_buffer.clear();
-				break ;
-			}
-			else {
-				this->_request.raw_body.append(this->_request_buffer.substr(0, this->_chunk_size), 0, this->_chunk_size);
-				this->_request_buffer = this->_request_buffer.substr(this->_chunk_size);
-				this->_total_body_size += this->_chunk_size;
-				this->_recv_bytes -= this->_chunk_size;
-				this->_chunk_size = 0;
-				continue ;
-			}
-		}
-		tmp = this->_request_buffer.substr(0, pos);
-		this->_request_buffer = this->_request_buffer.substr(pos + 2);
-		if (this->_chunk_size == 0 && is_hex(tmp)) {
-			this->_chunk_size = std::strtol(tmp.c_str(), NULL, 16);
-			if (this->_chunk_size == 0) {parse_body(); return ;}
-		}
-		else
-			{setRequestState(CANT_W_FILE, INTERNAL_SERVER_ERROR, ERROR); this->_state = ERROR; this->_status = INTERNAL_SERVER_ERROR; return ;}
+	while (this->_request_buffer.size() > 0 && this->_state != ERROR && this->_state != DONE) {
+		if (this->_chunk_size == 0)
+			get_chunk_size();
+		handle_positive_chunk();
 	}
 	if (this->_total_body_size > this->_max_body_size) {
 		setRequestState(BD_TOO_BIG, REQUEST_ENTITY_TOO_LARGE, ERROR);
@@ -755,6 +784,7 @@ void Request::parse_body() {
 	// if (this->_request.boundary.size() > 0)
 	// 	parse_multipart();
 	this->_state = DONE;
+	this->_request.state = DONE;
 }
 
 bool	Request::check_content_length(int ret) {
@@ -781,14 +811,14 @@ void	Request::recvRequest() {
 
 	if (this->_state == DONE || this->_state == ERROR) return ;
 	ret = recv(this->_fd, buffer, BUFFER_SIZE, 0);
+	// std::cout << "Received bytes : " << KRED << ret << KNRM << std::endl;
 	this->_recv_bytes = ret;
-	// std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
-	//std::cout << "Recv bytes : " << KRED << this->_recv_bytes << KNRM << std::endl;
 	if (ret == -1 || ret == 0) {
 		this->_status = INTERNAL_SERVER_ERROR;
 		this->_state = ERROR;
 		return ;
 	}
+	this->_ret_bytes += ret;
 	this->_request_buffer.append(buffer, ret);
 	set_first_line();
 	set_headers();

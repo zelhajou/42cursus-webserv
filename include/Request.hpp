@@ -34,6 +34,7 @@
 # define BD_TOO_BIG		"Body too large"
 # define CANT_O_FILE	"Can't open file"
 # define CANT_W_FILE	"Can't write to file"
+# define INV_CHUNK		"Invalid chunk"
 
 # define GREEN "\033[1,32m"
 # define RED "\033[1,31m"
@@ -97,7 +98,8 @@ public:
 	void						skip_content_typ(t_post_raw&);
 	void						skip_crlf(t_post_raw&);
 	void						remove_files();
-	void						handle_cgi_dir();
+	void						handle_positive_chunk();
+	void						get_chunk_size();
 
 public:
 	int										_fd;
@@ -122,6 +124,7 @@ public:
 	std::vector<ServerConfig*>				_servers;
 	std::vector<t_post_raw>					_post_raw;
 	std::ofstream							_file;
+	size_t									_ret_bytes;
 };
 
 #endif
