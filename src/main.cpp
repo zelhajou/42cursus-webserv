@@ -16,11 +16,6 @@
 
 Sockets		S;
 
-void	leaks_fun(void)
-{
-	system("leaks webserv");
-}
-
 void	sig_nan(int sig_num)
 {
 	std::cout << KCYN << "main_process:" << KNRM
@@ -72,7 +67,6 @@ int main(int argc, char *argv[], char **env)
 	MainConfig 	main_config_validated;
 	std::string cwd;
 	
-	// atexit(leaks_fun);
 	fix_up_signals(sig_nan);
 	std::string	config_file;
 	if (argc > 2) {

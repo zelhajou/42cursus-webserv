@@ -4,12 +4,11 @@ Sockets::Sockets(const Sockets &S) {*this = S; this->_main_proc = true;}
 Sockets	&Sockets::operator = (const Sockets &S) { (void)S; return *this;}
 
 void	fix_up_signals(void (*f)(int)) {
-	(void)f;
-	// signal(SIGPIPE, SIG_IGN);
-	// signal(SIGHUP, SIG_IGN);
-	// signal(SIGTERM, f);
-	// signal(SIGQUIT, f);
-	// signal(SIGINT, f);
+	signal(SIGPIPE, SIG_IGN);
+	signal(SIGHUP, SIG_IGN);
+	signal(SIGTERM, f);
+	signal(SIGQUIT, f);
+	signal(SIGINT, f);
 }
 
 static	void	child_ex(int sig_num) {
@@ -21,7 +20,7 @@ static	void	child_ex(int sig_num) {
 
 Sockets::Sockets( void ) : active_master(0), _main_proc(true) {
 	std::srand(std::time(NULL));
-	// std::cout << CLR_TERM;
+	std::cout << CLR_TERM;
 }
 
 Sockets::~Sockets() {
@@ -84,9 +83,6 @@ static	std::string	exec_job(pid_t *grandchild, char *executer, char *script, cha
 		}
 		dup2(pi[1], 1); close(pi[1]);
 		execve(argv[0], argv, env);
-		for (int i=0; env[i]; i++)
-			{ delete env[i]; }
-		delete	[] env;
 		std::cout << KRED << "execve: " << strerror(errno) << KNRM << "\n";
 		exit(EXIT_FAILURE);
 	}
@@ -242,7 +238,6 @@ int	Sockets::initiate_master_process(std::pair<int, int>* pr_info, std::string e
 		master_routine(this->socket_path, exec, uri, file, env);
 		exit(EXIT_FAILURE);
 	}
-	if (pid == 0)	{delete pr_info; this->_main_proc = false; master_routine(this->socket_path, exec, uri, file, env);}
 	this->_main_proc = true;
 	if ((unix_sock = ::accept(unix_listener, NULL, NULL)) < 0)  return -1;
 	close(unix_listener);
@@ -493,7 +488,7 @@ void	Sockets::recvFrom(int sock_fd) {
 void	Sockets::sendTo(int sock_fd) {
 	ServerConfig *serv = this->_fd_to_server.find(sock_fd)->second;
 	std::map<int, std::pair<Request, Response>* >::iterator pai = serv->_requests.find(sock_fd);
-	pai->second->second.sendResponse(sock_fd, *this, serv);
+	pai->second->second.sendResponse(sock_fd, serv);
 	if (pai->second->second.get_status() == DONE) {
 		if (pai->second->second._connection_type == "keep-alive" && pai->second->second._has_body) {
 			this->_kqueue.SET_QUEUE(sock_fd, EVFILT_WRITE, 0);

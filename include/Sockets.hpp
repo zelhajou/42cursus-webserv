@@ -39,7 +39,9 @@
 # define DEFAULT_CONFIG CONFIG_PATH"/config_files/default.conf"
 # define _S_DEL "__S_"CRLF"_DEL__"
 # define _M_DEL "__M_"CRLF"_DEL__"
-# define CGI_TIME_LIMIT		10	// s
+# ifndef CGI_TIME_LIMIT
+	# define CGI_TIME_LIMIT		30
+# endif
 # define CGI_PIPE_MAX_SIZE	1000
 # define UNIX_SOCK_BUFFER	8000
 # define PYTHON_PATH	"/usr/local/bin/python3"
@@ -88,8 +90,6 @@ public:
 	//
 	void							initiate_servers(MainConfig&, char **);
 	int							initiate_master_process(std::pair<int, int>*, std::string, std::string, std::string, std::string);
-	bool							update_master_state();
-	std::string						execute_script(std::string, std::string);
 	void							check_and_remove(std::string);
 	void							_enrg_env_var(std::string, std::string);
 	void							_initiate_env_variables(char**);
@@ -108,7 +108,6 @@ private:
 	std::map<int, std::pair<int, int>*>			_cgi_clients; // < unix_process, < worker_pid, client > >
 	pid_t						master_PID;
 	int						master_process;
-	int						cgi_controller;
 	std::string					socket_path;
 	bool						active_master;
 	bool						_main_proc;

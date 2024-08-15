@@ -147,7 +147,7 @@ void	Response::file_to_disk(int upload_buffer_size) {
 				this->_recv[0] = 0;
 				this->_recv[1] = this->_request->_request.raw_body.size();
 				this->_upload_target = conc_urls(this->_upload_path, _generate_random_string(this->_upload_path, 15));
-				this->_upload_stream.open(this->_upload_target, std::ios::out);
+				
 				if (!this->_upload_stream) throw std::runtime_error("cant open upload stream");
 			}
 			if (this->_recv[0] + upload_buffer_size > this->_recv[1]) upload_buffer_size = this->_recv[1] - this->_recv[0];
@@ -179,7 +179,7 @@ void	Response::file_to_disk(int upload_buffer_size) {
 	} catch (std::exception &l) {(void)l;
 		this->_post_status = false;
 		this->_recv[0] = this->_recv[1];
-		return ;
+		return ;this->_upload_stream.open(this->_upload_target, std::ios::out);
 	}
 }
 
@@ -262,24 +262,9 @@ size_t	Response::form_headers(ServerConfig *server) {
 	return this->header.size();
 }
 
-void	Response::sendResponse(int sock_fd, Sockets &sock, ServerConfig *server) {
+void	Response::sendResponse(int sock_fd, ServerConfig *server) {
 	int		sent_res;
 
-	if (this->status == UPLOADING) {
-		this->file_to_disk(UPLOAD_BUFFER_SIZE);
-		if ((this->_raw_upload && this->_recv[0] >= this->_recv[1])
-			|| (!this->_raw_upload && this->_recv[2] >= this->_recv[3])) {
-			if (this->_upload_stream.is_open()) this->_upload_stream.close();
-			this->target_file = this->_post_status ?
-				this->generate_status_file(this->_request->getStatus(), server, "") :
-				this->generate_status_file(INTERNAL_SERVER_ERROR, server, "UPLOAD FAILURE");
-			this->_begin_response(sock, server, 0);
-			this->status = FIRST_LINE;
-		}
-		else if (DEBUG) std::cout << "\t  [" << server->server_name << " upload: " << this->_recv[0] << " of " << this->_recv[1]
-				<< ", file " << (this->_raw_upload ? "" : (std::to_string(this->_recv[2]+1) + " of " + std::to_string(this->_recv[3]))) << "]" << std::endl;
-		return ;
-	}
 	if (this->status == FIRST_LINE) {
 		this->_sent[1] = this->form_headers(server);
 		this->status = HEADERS;

@@ -19,7 +19,7 @@ class	Response {
 		~Response();
 		void				_initiate_response(int, Sockets &, ServerConfig*);
 		void				_begin_response(Sockets &, ServerConfig*, int);
-		void				sendResponse(int, Sockets&, ServerConfig*);
+		void				sendResponse(int, ServerConfig*);
 		size_t				form_headers(ServerConfig*);
 		e_parser_state			get_status();
 		std::string			http_code_msg(e_status);

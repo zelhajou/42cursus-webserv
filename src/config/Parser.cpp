@@ -151,8 +151,6 @@ void Parser::parseLocationDirective(LocationConfig& location)
     std::vector<std::string> values;
     int line_number = token.getLine();
 
-
-
     while (pos < tokens.size() && tokens[pos].getType() != TOKEN_SEMICOLON && tokens[pos].getType() != TOKEN_OPEN_BRACE && tokens[pos].getType() != TOKEN_CLOSE_BRACE)
     {
         Token t = tokens[pos];

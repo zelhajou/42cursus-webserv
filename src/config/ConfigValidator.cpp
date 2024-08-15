@@ -228,7 +228,6 @@ void ConfigValidator::validateAllowedMethods(const std::vector<std::string>& met
     for (it = methods.begin(); it != methods.end(); ++it)
 	{
         if (*it != "GET" && *it != "POST" && *it != "DELETE")
-        if (*it != "GET" && *it != "POST" && *it != "DELETE")
             throw std::runtime_error("Invalid allowed method: " + *it);
     }
 }
