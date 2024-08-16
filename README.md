@@ -1,3 +1,7 @@
+
+![ascii-text-art (1)](https://github.com/user-attachments/assets/f0e1b3d8-5e35-4965-93a1-acf85a5c98b6)
+
+
 # 42cursus-webserv
 
 ## Overview
