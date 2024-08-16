@@ -12,8 +12,6 @@ This project involves developing a robust HTTP server in C++98, designed to hand
 - [Team Members and Roles](#team-members-and-roles)
 - [Task Assignments](#task-assignments)
 - [Team Composition and Initial Assignments](#team-composition-and-initial-assignments)
-- 
-
 - [Topics](#topics)
 
 ## Features
