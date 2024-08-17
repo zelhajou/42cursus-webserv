@@ -643,7 +643,11 @@ Non-blocking I/O and multiplexing are techniques used to handle multiple I/O ope
 			// fcntl(): Performs operations on file descriptors.
 			```
 	- **Multiplexing**:
-		- **select()**:
+ 		- <details>
+			<summary>
+				select():
+			</summary>
+			
 			- Monitors multiple file descriptors for I/O readiness.
 			- **Read Set**: Contains file descriptors that are ready for reading.
 			- **Write Set**: Contains file descriptors that are ready for writing.
@@ -670,7 +674,13 @@ Non-blocking I/O and multiplexing are techniques used to handle multiple I/O ope
 			// FD_CLR: Removes a file descriptor from a set.
 			// FD_ISSET: Checks if a file descriptor is in a set.
 			```
-		- **poll()**:
+	 	</details>
+   
+		- <details>
+			<summary>
+				poll():
+			</summary>
+		
 			- Monitors multiple file descriptors for I/O readiness.
 			- **Timeout**:
 				- Specifies the maximum time to wait for an event.
@@ -691,7 +701,13 @@ Non-blocking I/O and multiplexing are techniques used to handle multiple I/O ope
 			// fds.events: Events to monitor.
 			// fds.revents: Events that occurred.
 			```
-		- **epoll()**:
+   		</details>
+
+		- <details>
+			<summary>
+				epoll():
+			</summary>
+	     
 			- Monitors multiple file descriptors for I/O readiness.
 			- **Timeout**:
 				- Specifies the maximum time to wait for an event.
@@ -712,23 +728,30 @@ Non-blocking I/O and multiplexing are techniques used to handle multiple I/O ope
 			// epoll_ctl(): Modifies an epoll instance.
 			// epoll_wait(): Waits for an event on an epoll instance.
 			```
-		- **kqueue()**:
+   		</details>
+ 
+	 	- <details>
+			<summary>
+				kqueue():
+			</summary>
+	
 			- Monitors multiple file descriptors for I/O readiness.
-			- **Timeout**:
-				- Specifies the maximum time to wait for an event.
+			- **Timeout**: Specifies the maximum time to wait for an event.
 			- **kqueue()** returns the number of ready file descriptors.
 			```c
 			int kq = kqueue();
 			struct kevent event;
 			EV_SET(&event, sockfd, EVFILT_READ, EV_ADD, 0, 0, NULL);
-
+			
 			kevent(kq, &event, 1, &event, 1, NULL);
-
+			
 			// kqueue(): Creates a kqueue instance.
 			// struct kevent: Structure for kqueue events.
 			// EV_SET: Initializes a kevent structure.
 			// kevent(): Modifies a kqueue instance.
 			```
+	   
+	   	</details>
 
 ### HTTP Protocol
 
