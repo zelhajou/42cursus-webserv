@@ -627,6 +627,7 @@ Socket programming is a way of connecting two nodes on a network to communicate 
 
 
 - [Sockets and Network Programming in C](https://www.codequoi.com/en/sockets-and-network-programming-in-c/)
+- [fun with sockets: let's write a webserver!](https://youtu.be/1HF-UAGcuvs)
 
 
 ### Non-blocking I/O and Multiplexing
