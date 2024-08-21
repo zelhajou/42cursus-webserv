@@ -35,7 +35,7 @@ This project involves developing a robust HTTP server in C++98, designed to hand
 ## Team Members and Roles
 
 - [Hassan Sobane](https://github.com/hsobane) (hsobane): Network Infrastructure and Server Setup
-- [Bilal Eddinaoui](https://github.com/edbilal) (beddinao): HTTP Protocol Handling
+- [Bilal Eddinaoui](https://github.com/beddinao) (beddinao): HTTP Protocol Handling
 - [Zakaria Elhajoui](https://github.com/zelhajou) (zelhajou): Configuration Management and Logging
 
 ## Task Assignments
